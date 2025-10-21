@@ -36,16 +36,17 @@ async function readDb(drive) {
     if (!fileId) throw new Error("Missing GOOGLE_DRIVE_FILE_ID environment variable.");
     const res = await drive.files.get({ fileId, alt: 'media' });
     try {
-        if (!res.data) return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3 }, templates: [], addedData: [], news: [] };
+        if (!res.data) return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3, dataRetentionDays: 0 }, templates: [], addedData: [], news: [] };
         const dbData = typeof res.data === 'object' ? res.data : JSON.parse(res.data);
-        if (!dbData.settings) dbData.settings = { defaultDeviceLimit: 3 };
+        if (!dbData.settings) dbData.settings = { defaultDeviceLimit: 3, dataRetentionDays: 0 };
+        if (dbData.settings.dataRetentionDays === undefined) dbData.settings.dataRetentionDays = 0; // Додаємо, якщо налаштування вже існують
         if (!dbData.templates) dbData.templates = [];
         if (!dbData.addedData) dbData.addedData = [];
         if (!dbData.news) dbData.news = [];
         return dbData;
     } catch (e) {
         console.warn("Could not parse DB file. Starting with empty state. Error:", e.message);
-        return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3 }, templates: [], addedData: [], news: [] };
+        return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3, dataRetentionDays: 0 }, templates: [], addedData: [], news: [] };
     }
 }
 
@@ -216,6 +217,7 @@ exports.handler = async (event) => {
                 }
                 case 'updateGlobalSettings': {
                     db.settings.defaultDeviceLimit = parseInt(payload.defaultDeviceLimit, 10) || 3;
+                    db.settings.dataRetentionDays = parseInt(payload.dataRetentionDays, 10) || 0;
                     operationResult = { statusCode: 200, body: 'Settings updated.' };
                     break;
                 }
