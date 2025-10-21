@@ -363,6 +363,54 @@
             #news-form > div:last-child .btn { width: 100%; }
             #news-form > div:last-child input#delete-added-id { width: 100%; min-width: 0; }
         }
+        /* --- DB Editor Styles --- */
+        #db-editor-container {
+            background-color: #0d1117;
+            color: #c9d1d9;
+            font-family: 'Menlo', 'Courier New', monospace;
+            font-size: 14px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+        .db-node {
+            margin-left: 20px;
+            border-left: 1px solid #30363d;
+            padding-left: 20px;
+        }
+        .db-node.db-root { margin-left: 0; border-left: none; padding-left: 0; }
+        .db-entry { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 5px; position: relative; }
+        .db-key { color: #79c0ff; cursor: pointer; }
+        .db-key:hover { text-decoration: underline; }
+        .db-key.collapsible::before {
+            content: '▶';
+            display: inline-block;
+            margin-right: 8px;
+            transition: transform 0.2s;
+            font-size: 10px;
+        }
+        .db-key.collapsible.expanded::before { transform: rotate(90deg); }
+        .db-value-preview { color: #8b949e; margin-left: 10px; font-style: italic; }
+        .db-content { display: none; }
+        .db-content.expanded { display: block; }
+        .db-value-editor {
+            background: #161b22;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            border-radius: 6px;
+            padding: 4px 8px;
+            margin-left: 10px;
+            font-family: inherit;
+        }
+        .db-value.string { color: #a5d6ff; }
+        .db-value.number { color: #79c0ff; }
+        .db-value.boolean { color: #ff7b72; }
+        .db-value.null { color: #ff7b72; font-style: italic; }
+        .db-actions { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+        .db-action-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; padding: 2px; }
+        .db-action-btn:hover { color: #c9d1d9; }
+        .db-entry > input[type="checkbox"] { margin-right: 10px; }
+        #db-editor-actions { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 1rem; }
     </style>
 </head>
 <body>
@@ -377,8 +425,21 @@
         </header>
         <div id="prompt-container"><p>Введіть ключ доступу для завантаження даних.</p></div>
         <div id="admin-content" style="display:none;"></div>
+        <section id="db-editor-section">
+            <h2>Редактор Бази Даних</h2>
+            <p style="color: var(--text-color-secondary); margin-bottom: 1rem;">Цей інструмент дозволяє напряму редагувати JSON-файл бази даних. Будьте вкрай обережні, оскільки некоректні зміни можуть зламати систему.</p>
+            <div id="db-editor-controls">
+                <button class="btn btn-primary" id="load-db-editor-btn">Завантажити редактор</button>
+            </div>
+            <div id="db-editor-container" style="margin-top: 1.5rem;"></div>
+        </section>
+        <section>
+            <h2>Активні Push-сповіщення</h2>
+            <div id="active-push-news-list">
+                <p>Завантаження...</p>
+            </div>
+        </section>
     </main>
-
     <dialog id="user-details-modal">
         <div class="modal-header">
             <h2 id="modal-title">Деталі користувача</h2>
@@ -538,13 +599,74 @@
                 adminContent.innerHTML = `
                     <section>
                         <h2>Глобальні налаштування</h2>
-                        <div class="form-group">
-                            <label for="default-device-limit">Ліміт пристроїв за замовчуванням</label>
-                            <div style="display: flex; gap: 8px;">
-                                <input type="number" id="default-device-limit" value="${dashboardData.settings.defaultDeviceLimit || 3}" style="max-width: 150px;">
-                                <button class="btn btn-primary" onclick="updateGlobalSettings()">Зберегти</button>
+                        <div class="form-grid form-grid-2">
+                             <div class="form-group">
+                                <label for="default-device-limit">Ліміт пристроїв за замовчуванням</label>
+                                <input type="number" id="default-device-limit" value="${dashboardData.settings.defaultDeviceLimit || 3}">
+                            </div>
+                            <div class="form-group">
+                                <label for="data-retention-days">Термін зберігання даних (днів)</label>
+                                <input type="number" id="data-retention-days" value="${dashboardData.settings.dataRetentionDays || 0}" min="0">
+                                <small style="color: var(--text-color-secondary); margin-top: 4px; display: block;">Встановіть 0, щоб ніколи не видаляти дані автоматично.</small>
                             </div>
                         </div>
+                        <button class="btn btn-primary" style="margin-top: 1rem;" onclick="updateGlobalSettings()">Зберегти налаштування</button>
+                    </section>
+                    <section>
+                        <h2>Умови та Push-сповіщення</h2>
+                        <div class="form-group">
+                            <label>Умови використання</label>
+                            <p style="color: var(--text-color-secondary); margin-bottom: 8px;">Керуйте вимогою повторного погодження з умовами використання.</p>
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-secondary" onclick="requireTermsUpdate()">Вимагати погодження</button>
+                                <button class="btn btn-danger" onclick="revokeTermsPush()">Скасувати вимогу</button>
+                            </div>
+                        </div>
+                        <hr style="margin: 1.5rem 0;">
+                        <h3>Створити Push-сповіщення</h3>
+                        <form id="push-news-form">
+                             <div class="form-group">
+                                <label for="push-news-title">Заголовок</label>
+                                <input type="text" id="push-news-title" required>
+                            </div>
+                             <div class="form-group">
+                                <label for="push-news-text">Текст сповіщення</label>
+                                <textarea id="push-news-text" required></textarea>
+                            </div>
+                            <!-- ДОДАЙТЕ ЦЕЙ БЛОК -->
+                            <div class="form-group">
+                                <label for="push-news-image">URL зображення (необов'язково)</label>
+                                <input type="url" id="push-news-image" placeholder="https://example.com/image.png">
+                            </div>
+                            <!-- КІНЕЦЬ БЛОКУ -->
+                            <div class="form-grid form-grid-2">
+                                <div class="form-group">
+                                    <label for="push-news-mode">Режим</label>
+                                    <select id="push-news-mode">
+                                        <option value="passive">Пасивний (прокрутка та галочка)</option>
+                                        <option value="aggressive">Агресивний (ключове слово)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="push-news-keyword-group" style="display: none;">
+                                    <label for="push-news-keyword">Ключове слово</label>
+                                    <input type="text" id="push-news-keyword" placeholder="Слово для перевірки">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Аудиторія (введіть ID користувачів через кому)</label>
+                                <div class="form-grid form-grid-3">
+                                    <select id="push-audience-type">
+                                        <option value="all">Всі користувачі</option>
+                                        <option value="include">Тільки вказані</option>
+                                        <option value="exclude">Всі, крім вказаних</option>
+                                    </select>
+                                    <div style="grid-column: span 2;">
+                                        <input type="text" id="push-audience-ids" placeholder="userId1,userId2,...">
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Надіслати Push-сповіщення</button>
+                        </form>
                     </section>
                     <section>
                         <h2>Створення посилання-запрошення</h2>
@@ -561,6 +683,23 @@
                             <div class="form-group"><input type="text" id="news-title" placeholder="Заголовок" required></div>
                             <div class="form-group"><input type="url" id="news-image" placeholder="URL зображення (необов'язково)"></div>
                             <div class="form-group" style="grid-column: 1 / -1;"><textarea id="news-text" placeholder="Текст новини"></textarea></div>
+                            
+                            <!-- ДОДАНИЙ БЛОК -->
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label>Аудиторія для новини (введіть ID користувачів через кому)</label>
+                                <div class="form-grid form-grid-3">
+                                    <select id="news-audience-type">
+                                        <option value="all">Всі користувачі</option>
+                                        <option value="include">Тільки вказані</option>
+                                        <option value="exclude">Всі, крім вказаних</option>
+                                    </select>
+                                    <div style="grid-column: span 2;">
+                                        <input type="text" id="news-audience-ids" placeholder="userId1,userId2,...">
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- КІНЕЦЬ ДОДАНОГО БЛОКУ -->
+
                             <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                                 <button type="submit" class="btn btn-primary">Опублікувати новину</button>
                                 <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
@@ -624,6 +763,7 @@
                 document.getElementById('generate-form').addEventListener('submit', generateLink);
                 document.getElementById('add-template-form').addEventListener('submit', addTemplate);
                 document.getElementById('news-form').addEventListener('submit', createNews);
+                renderActivePushNews();
                 return true;
             } finally {
                 hideLoader();
@@ -1194,11 +1334,14 @@
             const title = document.getElementById('news-title').value;
             const imageUrl = document.getElementById('news-image').value;
             const text = document.getElementById('news-text').value;
+            const audience = getAudiencePayload('news-audience-type', 'news-audience-ids');
+
             showLoader('Публікація новини...');
             try{
-                const res = await apiCall('createNews', { title, imageUrl, text });
+                const res = await apiCall('createNews', { title, imageUrl, text, audience });
                 if(res && res.ok){
                     document.getElementById('news-form').reset();
+                    document.getElementById('news-audience-ids').value = '';
                     await renderNewsList();
                 }
             } finally { hideLoader(); }
@@ -1211,19 +1354,19 @@
             const items = await res.json();
             if(!Array.isArray(items) || items.length===0){ listEl.innerHTML = '<p style="text-align:center; color: var(--text-color-secondary); padding: 1rem;">Новин поки немає.</p>'; return; }
             const cards = items.map(n=>`
-                <div style="display:flex; gap:12px; padding:10px; border:1px solid var(--border-color); border-radius:12px; margin-bottom:8px;">
-                    ${n.imageUrl ? `<img src="${n.imageUrl}" alt="img" style="width:80px; height:80px; object-fit:cover; border-radius:8px;">` : ''}
-                    <div style="flex:1;">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 1rem;">
-                            <strong>${n.title}</strong>
+                <details style="border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 8px; padding: 10px;">
+                    <summary style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                        <strong>${n.title}</strong>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
                             <small style="color:var(--text-color-secondary); white-space:nowrap;">${new Date(n.createdAt).toLocaleString()}</small>
+                            <button class="btn btn-danger" onclick="event.preventDefault(); deleteNews('${n.id}')">Видалити</button>
                         </div>
-                        <p style="white-space: pre-wrap; margin: 0.5rem 0; font-size: 0.9em; color: var(--text-color-secondary);">${(n.text||'')}</p>
-                        <div style="margin-top:6px;">
-                            <button class="btn btn-danger" onclick="deleteNews('${n.id}')">Видалити</button>
-                        </div>
+                    </summary>
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        ${n.imageUrl ? `<img src="${n.imageUrl}" alt="img" style="max-width: 200px; height: auto; object-fit: cover; border-radius: 8px; margin-bottom: 1rem;">` : ''}
+                        <p style="white-space: pre-wrap; font-size: 0.9em; color: var(--text-color-secondary); word-break: break-word;">${(n.text||'')}</p>
                     </div>
-                </div>
+                </details>
             `).join('');
             listEl.innerHTML = cards;
         }
@@ -1251,7 +1394,17 @@
         async function deleteTemplate(templateId, name) { if (confirm(`Ви впевнені, що хочете видалити шаблон "${name}"?`)) { showLoader('Видалення шаблону...'); try { await apiCall('deleteTemplate', { templateId }); await loadAndRenderDashboard(); } finally { hideLoader(); } } }
         async function generateLink(e) { e.preventDefault(); const uses = document.getElementById('uses').value; showLoader('Генерація посилання...'); try { const res = await apiCall('generateCode', { uses }); if (!res || !res.ok) return; const newCode = await res.json(); const link = `${window.location.protocol}//${window.location.host}/?ref=${newCode.code}`; document.getElementById('new-link-container').innerHTML = `<div class="form-group"><label>Згенероване посилання</label><input type="text" readonly value="${link}" onclick="this.select()"></div>`; const refreshRes = await apiCall('getDashboardData'); if (refreshRes && refreshRes.ok) { dashboardData = await refreshRes.json(); renderCodesTable(); } } finally { hideLoader(); } }
         async function deleteCode(code) { if (confirm(`Ви впевнені, що хочете видалити код "${code}"?`)) { showLoader('Видалення коду...'); try { await apiCall('deleteRefCode', { code }); await loadAndRenderDashboard(); } finally { hideLoader(); } } }
-        async function updateGlobalSettings() { const limit = document.getElementById('default-device-limit').value; showLoader('Оновлення налаштувань...'); try { await apiCall('updateGlobalSettings', { defaultDeviceLimit: limit }); await loadAndRenderDashboard(); } finally { hideLoader(); } }
+        async function updateGlobalSettings() { 
+            const limit = document.getElementById('default-device-limit').value;
+            const retention = document.getElementById('data-retention-days').value; 
+            showLoader('Оновлення налаштувань...'); 
+            try { 
+                await apiCall('updateGlobalSettings', { defaultDeviceLimit: limit, dataRetentionDays: retention }); 
+                await loadAndRenderDashboard(); 
+            } finally { 
+                hideLoader(); 
+            } 
+        }
         async function updateUser(userId, status, limitInput) { const limit = limitInput === '' ? null : parseInt(limitInput, 10); showLoader('Оновлення користувача...'); try { await apiCall('updateUser', { userId, status, deviceLimitOverride: limit }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
         async function updateSession(userId, sessionId, status) { showLoader('Оновлення сесії...'); try { await apiCall('updateSession', { userId, sessionId, status }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
         async function deleteSession(userId, sessionId) { if (confirm(`Ви впевнені, що хочете видалити цей сеанс? Це дозволить користувачу увійти з нового пристрою.`)) { showLoader('Видалення сесії...'); try { await apiCall('deleteSession', { userId, sessionId }); await reloadAndShowUser(userId); } finally { hideLoader(); } } }
@@ -1260,6 +1413,331 @@
         async function regenerateTelegramId(userId) { showLoader('Перегенерація ID...'); try { await apiCall('regenerateTelegramId', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
         async function toggleTelegramStatus(userId) { showLoader('Зміна статусу...'); try { await apiCall('toggleTelegramStatus', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
         function copyCodeLink(code, buttonElement) { const link = `${window.location.protocol}//${window.location.host}/?ref=${code}`; navigator.clipboard.writeText(link).then(() => { const originalText = buttonElement.textContent; buttonElement.textContent = 'Скопійовано!'; setTimeout(() => { buttonElement.textContent = originalText; }, 2000); }); }
+        document.addEventListener('submit', function(e){
+            if (e.target.id === 'push-news-form') createPushNews(e);
+        });
+
+        document.addEventListener('change', function(e){
+            if (e.target.id === 'push-news-mode') {
+                document.getElementById('push-news-keyword-group').style.display = e.target.value === 'aggressive' ? 'block' : 'none';
+            }
+        });
+
+        async function requireTermsUpdate() {
+            if (confirm('Ви впевнені, що хочете вимагати від усіх користувачів повторного погодження з Умовами Використання?')) {
+                showLoader('Активуємо push...');
+                try {
+                    await apiCall('requireTermsUpdate', {});
+                    alert('Готово. При наступному вході користувачі повинні будуть погодитись з умовами.');
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+        
+        function getAudiencePayload(typeElId, idsElId) {
+            const type = document.getElementById(typeElId).value;
+            const idsRaw = document.getElementById(idsElId).value.trim();
+            const userIds = idsRaw ? idsRaw.split(',').map(id => id.trim()).filter(Boolean) : [];
+            return { type, userIds };
+        }
+
+        async function createPushNews(e) {
+            e.preventDefault();
+            const title = document.getElementById('push-news-title').value;
+            const text = document.getElementById('push-news-text').value;
+            const imageUrl = document.getElementById('push-news-image').value;
+            const mode = document.getElementById('push-news-mode').value;
+            const keyword = document.getElementById('push-news-keyword').value;
+            const audience = getAudiencePayload('push-audience-type', 'push-audience-ids');
+
+            if (mode === 'aggressive' && !keyword.trim()) {
+                alert('Для агресивного режиму потрібно вказати ключове слово.');
+                return;
+            }
+
+            showLoader('Надсилання push-сповіщення...');
+            try {
+                const res = await apiCall('createPushNews', { title, text, imageUrl, mode, keyword, audience });
+                if (res && res.ok) {
+                    document.getElementById('push-news-form').reset();
+                    await loadAndRenderDashboard();
+                    alert('Push-сповіщення створено та надіслано.');
+                }
+            } finally {
+                hideLoader();
+            }
+        }
+
+
+let dbState = null; // Локальна копія БД
+        let editorContainer = document.getElementById('db-editor-container');
+
+        document.getElementById('load-db-editor-btn').addEventListener('click', async () => {
+            showLoader('Завантаження бази даних...');
+            try {
+                const res = await apiCall('getRawDatabase');
+                if (!res || !res.ok) throw new Error('Failed to fetch DB');
+                dbState = await res.json();
+                renderDbEditor();
+            } catch (error) {
+                alert('Помилка завантаження бази даних: ' + error.message);
+            } finally {
+                hideLoader();
+            }
+        });
+
+        function renderDbEditor() {
+            editorContainer.innerHTML = ''; // Очистка
+            const rootNode = createDbNode(dbState, 'База Даних', ['root']);
+            rootNode.classList.add('db-root');
+            editorContainer.appendChild(rootNode);
+
+            document.getElementById('db-editor-controls').innerHTML = `
+                <div id="db-editor-actions">
+                    <button class="btn btn-primary" id="save-db-btn">Зберегти зміни</button>
+                    <button class="btn btn-secondary" id="cancel-db-btn">Скасувати</button>
+                    <button class="btn btn-danger" id="delete-selected-btn" style="margin-left: auto;">Видалити вибране</button>
+                </div>
+            `;
+            document.getElementById('save-db-btn').addEventListener('click', saveDbChanges);
+            document.getElementById('cancel-db-btn').addEventListener('click', () => {
+                dbState = null;
+                editorContainer.innerHTML = '';
+                document.getElementById('db-editor-controls').innerHTML = '<button class="btn btn-primary" id="load-db-editor-btn">Завантажити редактор</button>';
+                document.getElementById('load-db-editor-btn').addEventListener('click', arguments.callee.caller);
+            });
+            document.getElementById('delete-selected-btn').addEventListener('click', deleteSelectedNodes);
+        }
+
+        function createDbNode(data, key, path) {
+            const nodeElement = document.createElement('div');
+            nodeElement.className = 'db-node';
+            
+            if (typeof data === 'object' && data !== null) {
+                const isArray = Array.isArray(data);
+                const entries = Object.entries(data);
+
+                const header = document.createElement('div');
+                header.className = 'db-entry';
+                
+                const keySpan = document.createElement('span');
+                keySpan.className = 'db-key collapsible';
+                keySpan.textContent = `${key}`;
+                
+                const previewSpan = document.createElement('span');
+                previewSpan.className = 'db-value-preview';
+                previewSpan.textContent = isArray ? `Array[${entries.length}]` : `Object{${entries.length}}`;
+
+                header.appendChild(keySpan);
+                header.appendChild(previewSpan);
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'db-content';
+
+                keySpan.addEventListener('click', () => {
+                    keySpan.classList.toggle('expanded');
+                    contentDiv.classList.toggle('expanded');
+                });
+                
+                entries.forEach(([childKey, childValue]) => {
+                    contentDiv.appendChild(createDbNode(childValue, childKey, [...path, childKey]));
+                });
+                
+                nodeElement.appendChild(header);
+                nodeElement.appendChild(contentDiv);
+
+            } else {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = 'db-entry';
+                
+                const parentPath = path.slice(0, -1);
+                const parent = getDbNodeByPath(parentPath);
+                if(Array.isArray(parent)) {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.dataset.path = path.join('.');
+                    entryDiv.appendChild(checkbox);
+                }
+
+                const keySpan = document.createElement('span');
+                keySpan.className = 'db-key';
+                keySpan.textContent = `${key}: `;
+                
+                const valueSpan = document.createElement('span');
+                valueSpan.className = `db-value ${typeof data}`;
+                valueSpan.textContent = JSON.stringify(data);
+                
+                entryDiv.appendChild(keySpan);
+                entryDiv.appendChild(valueSpan);
+                
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'db-actions';
+                actionsDiv.innerHTML = `<button class="db-action-btn" title="Редагувати">✏️</button><button class="db-action-btn" title="Видалити">🗑️</button>`;
+                
+                actionsDiv.querySelector('[title="Редагувати"]').addEventListener('click', () => {
+                    const newValue = prompt(`Введіть нове значення для "${path.join('.')}":`, JSON.stringify(data));
+                    if (newValue !== null) {
+                        try {
+                            const parsedValue = JSON.parse(newValue);
+                            setDbNodeByPath(path, parsedValue);
+                            renderDbEditor(); 
+                        } catch (e) { alert('Некоректний JSON формат.'); }
+                    }
+                });
+                actionsDiv.querySelector('[title="Видалити"]').addEventListener('click', () => {
+                    if(confirm(`Видалити "${path.join('.')}"?`)) {
+                        deleteDbNodeByPath(path);
+                        renderDbEditor();
+                    }
+                });
+
+                entryDiv.appendChild(actionsDiv);
+                nodeElement.appendChild(entryDiv);
+            }
+            
+            return nodeElement;
+        }
+
+        function getDbNodeByPath(path) {
+            let current = dbState;
+            for (let i = 1; i < path.length; i++) {
+                if (current === undefined) return undefined;
+                current = current[path[i]];
+            }
+            return current;
+        }
+
+        function setDbNodeByPath(path, value) {
+            let current = dbState;
+            for (let i = 1; i < path.length - 1; i++) {
+                current = current[path[i]];
+            }
+            current[path[path.length - 1]] = value;
+        }
+
+        function deleteDbNodeByPath(path) {
+            let current = dbState;
+            for (let i = 1; i < path.length - 1; i++) {
+                current = current[path[i]];
+            }
+            const finalKey = path[path.length - 1];
+            if (Array.isArray(current)) {
+                current.splice(Number(finalKey), 1);
+            } else {
+                delete current[finalKey];
+            }
+        }
+        
+        function deleteSelectedNodes() {
+            const checkboxes = editorContainer.querySelectorAll('input[type="checkbox"]:checked');
+            if (checkboxes.length === 0) {
+                alert('Не вибрано жодного елемента.');
+                return;
+            }
+            if (!confirm(`Ви впевнені, що хочете видалити ${checkboxes.length} вибраних елементів?`)) {
+                return;
+            }
+
+            const pathsToDelete = Array.from(checkboxes).map(cb => cb.dataset.path.split('.'));
+            
+            // Групуємо шляхи за батьківськими елементами, щоб ефективно видаляти з масивів
+            const groupedByParent = {};
+            pathsToDelete.forEach(path => {
+                const parentPath = path.slice(0, -1).join('.');
+                if (!groupedByParent[parentPath]) {
+                    groupedByParent[parentPath] = [];
+                }
+                groupedByParent[parentPath].push(path[path.length-1]);
+            });
+            
+            // Сортуємо індекси в зворотному порядку, щоб уникнути проблем зі зміщенням
+            for (const parentPathStr in groupedByParent) {
+                const parentPath = parentPathStr.split('.');
+                const parentNode = getDbNodeByPath(parentPath);
+                if (Array.isArray(parentNode)) {
+                    const indices = groupedByParent[parentPathStr].map(Number).sort((a, b) => b - a);
+                    indices.forEach(index => parentNode.splice(index, 1));
+                }
+            }
+            renderDbEditor();
+        }
+
+        async function saveDbChanges() {
+            if (!confirm('Ви впевнені, що хочете зберегти всі зміни в базі даних? Ця дія незворотня.')) {
+                return;
+            }
+            showLoader('Збереження бази даних...');
+            try {
+                const res = await apiCall('updateRawDatabase', dbState);
+                if (res && res.ok) {
+                    alert('База даних успішно оновлена.');
+                    // Перезавантажуємо всю адмін-панель, щоб відобразити нові дані
+                    await loadAndRenderDashboard();
+                }
+            } finally {
+                hideLoader();
+            }
+        }
+
+
+ async function revokeTermsPush() {
+            if (confirm('Ви впевнені, що хочете скасувати вимогу погодження з умовами? Користувачі, які ще не погодились, більше не побачать це вікно.')) {
+                showLoader('Скасування вимоги...');
+                try {
+                    await apiCall('revokeTermsPush');
+                    alert('Вимогу скасовано.');
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+
+        async function revokePushNews(pushId, title) {
+            if (confirm(`Ви впевнені, що хочете відкликати push-сповіщення "${title}"? Воно зникне у всіх користувачів, які його ще не бачили.`)) {
+                showLoader('Відкликання сповіщення...');
+                try {
+                    await apiCall('revokePushNews', { pushId });
+                    await loadAndRenderDashboard(); // Перезавантажуємо, щоб оновити список
+                } finally {
+                    hideLoader();
+                }
+            }
+        }
+        
+        function renderActivePushNews() {
+            const container = document.getElementById('active-push-news-list');
+            const pushNews = dashboardData.pushNews || [];
+            const users = dashboardData.users || [];
+
+            if (pushNews.length === 0) {
+                container.innerHTML = '<p style="text-align:center; color: var(--text-color-secondary); padding: 1rem;">Немає активних push-сповіщень.</p>';
+                return;
+            }
+
+            container.innerHTML = pushNews.map(p => {
+                const seenByDetails = p.seenBy.map(seen => {
+                    const user = users.find(u => u.userId === seen.userId);
+                    return `<li>${user ? user.nickname : 'Невідомий'} (<i>${new Date(seen.seenAt).toLocaleString()}</i>)</li>`;
+                }).join('');
+
+                return `
+                <details style="border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 1rem; padding: 1rem;">
+                    <summary style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; cursor: pointer;">
+                        <div>
+                            <h4 style="margin: 0 0 0.5rem 0;">${p.title}</h4>
+                            <span style="background: #eef2ff; color: #4338ca; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; font-weight: 500;">${p.mode === 'aggressive' ? 'Агресивний' : 'Пасивний'}</span>
+                        </div>
+                        <button class="btn btn-danger" onclick="event.preventDefault(); revokePushNews('${p.id}', '${p.title.replace(/'/g, "\\'")}')">Відкликати</button>
+                    </summary>
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <p><strong>Переглянули (${p.seenBy.length}):</strong></p>
+                        ${p.seenBy.length > 0 ? `<ul style="list-style-type: disc; padding-left: 20px; font-size: 0.9em; max-height: 150px; overflow-y: auto;">${seenByDetails}</ul>` : '<p style="font-size: 0.9em; color: var(--text-color-secondary);">Ще ніхто не переглянув.</p>'}
+                    </div>
+                </details>
+            `}).join('');
+        }
+        
     </script>
 </body>
 </html>

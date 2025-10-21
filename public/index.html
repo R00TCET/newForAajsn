@@ -120,37 +120,41 @@
         }
 
         async function renderRegistration(refCode) {
-            container.innerHTML = '<p style="text-align: center;">Перевірка запрошення...</p>';
-            const res = await apiCall('verifyRefCode', { ref: refCode });
-            if (!res.ok) {
-                renderError('Посилання недійсне', await res.text());
-                return;
-            }
+    container.innerHTML = '<p style="text-align: center;">Перевірка запрошення...</p>';
+    const res = await apiCall('verifyRefCode', { ref: refCode });
+    if (!res.ok) {
+        renderError('Посилання недійсне', await res.text());
+        return;
+    }
 
-            container.innerHTML = `
-                <h2>Створення акаунту</h2>
-                <form id="reg-form">
-                    <input 
-                        type="text" 
-                        id="nickname" 
-                        placeholder="Нікнейм" 
-                        required 
-                        minlength="3" 
-                        maxlength="20"
-                        pattern="^[a-zA-Z0-9]+$"
-                        title="Нікнейм може містити тільки латинські літери та цифри, без пробілів та спецсимволів.">
-                    <input 
-                        type="password" 
-                        id="password" 
-                        placeholder="Пароль (мін. 6 символів)" 
-                        minlength="6" 
-                        required>
-                    <button type="submit">Зареєструватися</button>
-                </form>
-                <p id="message" class="message"></p>`;
-            
-            document.getElementById('reg-form').addEventListener('submit', handleRegistration);
-        }
+    container.innerHTML = `
+        <h2>Створення акаунту</h2>
+        <form id="reg-form">
+            <input 
+                type="text" 
+                id="nickname" 
+                placeholder="Нікнейм" 
+                required 
+                minlength="3" 
+                maxlength="20"
+                pattern="^[a-zA-Z0-9]+$"
+                title="Нікнейм може містити тільки латинські літери та цифри, без пробілів та спецсимволів.">
+            <input 
+                type="password" 
+                id="password" 
+                placeholder="Пароль (мін. 6 символів)" 
+                minlength="6" 
+                required>
+            <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                <input type="checkbox" id="terms-agree" required style="margin: 0 10px 0 0; width: auto;">
+                <label for="terms-agree" style="font-size: 0.9em;">Я погоджуюсь з <a href="/user/termsofuse.txt" target="_blank" style="color: #007bff;">Умовами використання</a></label>
+            </div>
+            <button type="submit">Зареєструватися</button>
+        </form>
+        <p id="message" class="message"></p>`;
+    
+    document.getElementById('reg-form').addEventListener('submit', handleRegistration);
+}
         
         async function handleRegistration(e) {
             e.preventDefault();
@@ -185,17 +189,21 @@
         }
 
         function renderLogin(userId) {
-            container.innerHTML = `
-                <h2>Вхід у ваш акаунт</h2>
-                <form id="login-form">
-                    <input type="text" id="nickname" placeholder="Нікнейм" required>
-                    <input type="password" id="password" placeholder="Пароль" required>
-                    <button type="submit">Увійти</button>
-                </form>
-                <p id="message" class="message"></p>`;
-            
-            document.getElementById('login-form').addEventListener('submit', (e) => handleLogin(e, userId));
-        }
+    container.innerHTML = `
+        <h2>Вхід у ваш акаунт</h2>
+        <form id="login-form">
+            <input type="text" id="nickname" placeholder="Нікнейм" required>
+            <input type="password" id="password" placeholder="Пароль" required>
+            <div style="display: flex; align-items: center; margin-bottom: 1rem;">
+                <input type="checkbox" id="terms-agree" required style="margin: 0 10px 0 0; width: auto;">
+                <label for="terms-agree" style="font-size: 0.9em;">Я погоджуюсь з <a href="/user/termsofuse.txt" target="_blank" style="color: #007bff;">Умовами використання</a></label>
+            </div>
+            <button type="submit">Увійти</button>
+        </form>
+        <p id="message" class="message"></p>`;
+    
+    document.getElementById('login-form').addEventListener('submit', (e) => handleLogin(e, userId));
+}
         
         async function handleLogin(e, userId) {
             e.preventDefault();

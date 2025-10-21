@@ -916,7 +916,21 @@
             opacity: 0.5;
             cursor: not-allowed;
         }
-
+	 .content-section {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+        }
+        .content-section.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* --- Виправлення спіннера --- */
+        .loader-spinner {
+            aspect-ratio: 1 / 1;
+            flex-shrink: 0;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -1323,7 +1337,7 @@
                 </header>
                 <main class="flex-1 overflow-auto p-4">
                     <img data-news-image alt="news" class="max-w-full h-auto rounded mb-4" style="display:none;">
-                    <div data-news-text class="whitespace-pre-wrap text-gray-800"></div>
+                    <div data-news-text class="whitespace-pre-wrap text-gray-800 break-words"></div>
                 </main>
             </div>
         </dialog>
@@ -1344,11 +1358,13 @@
     <div id="dialog-context-menu" class="context-menu"></div>
     <dialog id="tg-profile-modal" class="modal rounded-lg shadow-2xl p-0 max-w-md w-full bg-white"><div id="tg-profile-content"></div></dialog>
     <dialog id="tg-forward-modal" class="modal rounded-lg shadow-2xl p-0 max-w-md w-full bg-white"><div class="flex justify-between items-center p-4 border-b"><h2 class="text-lg sm:text-xl font-semibold text-gray-800">Переслати повідомлення</h2><button class="modal-close-btn">&times;</button></div><div id="tg-forward-dialog-list" class="max-h-[60vh] overflow-y-auto"></div></dialog>
-
+	<dialog id="action-required-modal" class="modal max-w-2xl w-full" style="padding: 0;">
+        <!-- Вміст буде генеруватися динамічно -->
+    </dialog>
 
     <script>
         const RENDER_AI_SERVICE_URL = 'https://bookish-broccoli.onrender.com'; 
-
+		const actionRequiredModal = document.getElementById('action-required-modal');
         // RENAMED a few variables to match new structure
         const pageSection = document.getElementById('page-section');
         const dataSection = document.getElementById('data-section');
@@ -2261,29 +2277,20 @@
                 window.__newsItemsCache = Array.isArray(items) ? items : [];
                 if(!Array.isArray(items) || items.length===0){ listEl.innerHTML = '<p class="p-6 text-center text-gray-500">Новин поки немає.</p>'; return; }
                 listEl.innerHTML = items.map((n, idx)=>`
-                    <div class="p-3 border rounded-md bg-white">
-                        <div class="flex gap-3">
-                            ${n.imageUrl ? `<img src="${n.imageUrl}" alt="news" class="w-20 h-20 object-cover rounded">` : ''}
-                            <div class="flex-1">
-                                <div class="flex items-center justify-between">
-                                    <strong><a href="#" class="news-title" data-index="${idx}">${n.title}</a></strong>
-                                    <small class="text-gray-500">${new Date(n.createdAt).toLocaleString()}</small>
+                    <div class="p-3 border rounded-md bg-white cursor-pointer hover:bg-gray-50" onclick="openNewsModal(window.__newsItemsCache[${idx}])">
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            ${n.imageUrl ? `<img src="${n.imageUrl}" alt="news" class="w-full sm:w-24 h-24 object-cover rounded flex-shrink-0">` : ''}
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-start justify-between">
+                                    <strong class="text-lg news-title truncate" data-index="${idx}">${n.title}</strong>
+                                    <small class="text-gray-500 text-xs text-right flex-shrink-0 ml-2">${new Date(n.createdAt).toLocaleDateString()}</small>
                                 </div>
-                                
+                                <p class="text-sm text-gray-600 mt-1 line-clamp-2 break-words">${(n.text || '').substring(0, 150)}${ (n.text || '').length > 150 ? '...' : ''}</p>
                             </div>
                         </div>
                     </div>
                 `).join('');
-                // Delegate click to open full-screen modal on title click
-            listEl.addEventListener('click', function(e){
-                    const link = e.target && e.target.closest('a.news-title');
-                    if (!link) return;
-                    e.preventDefault();
-                    const idx = parseInt(link.getAttribute('data-index'), 10);
-                    const item = (window.__newsItemsCache || [])[idx];
-                    if (!item) return;
-                    openNewsModal(item);
-            });
+                
                 newsLoaded = true;
             } catch(_) {
                 listEl.innerHTML = '<p class="p-6 text-center text-red-500">Не вдалося завантажити новини.</p>';
@@ -2291,6 +2298,7 @@
         }
 
         function openNewsModal(item){
+            if (!item) return; // Додамо перевірку
             const dlg = document.getElementById('news-modal');
             if (!dlg) return;
             const titleEl = dlg.querySelector('[data-news-title]');
@@ -2307,9 +2315,12 @@
                 imgEl.style.display = 'none';
             }
             textEl.textContent = item.text || '';
-            try { dlg.showModal(); } catch(_) { dlg.setAttribute('open', ''); }
+            try { 
+                openModal(dlg); // Використовуємо нашу нову функцію для відкриття модалок
+            } catch(_) { 
+                dlg.setAttribute('open', ''); 
+            }
         }
-        
         // --- NEW: Editor History Manager ---
         const editorHistoryManager = {
             history: [],
@@ -2976,42 +2987,50 @@
     }
 
         async function loadUserData() {
-            dashboardContent.style.display = 'none';
-            settingsContent.style.display = 'none';
-            initialLoader.style.display = 'flex';
-            try {
-                const data = await apiCall('getUserData');
-                if (data) {
-                    userData = data;
-                    renderContent();
-                    populateTemplates();
-                }
-			} catch (e) {
-				// Якщо сталася помилка під час завантаження, вважаємо, що сесія застаріла
-				try { localStorage.removeItem('jwt_token'); } catch (_) {}
-				showAlert('Ваш сеанс застарів. Будь ласка, увійдіть знову.', 'warning');
-				const userId = window.location.pathname.split('/').pop();
-				window.location.href = `/?login_for=${userId}`;
-            }
-			finally {
-				const currentHash = window.location.hash || '#dashboard';
-				// Respect the section already shown by navigation init; only set a section if none visible yet
-				const sectionIds = ['dashboard-content', 'settings-content', 'news-content'];
-				const hasVisibleSection = sectionIds.some(id => {
-					const el = document.getElementById(id);
-					return el && el.style.display === 'block';
-				});
-				if (!hasVisibleSection) {
-					const contentId = currentHash === '#settings' ? 'settings-content' : (currentHash === '#news' ? 'news-content' : 'dashboard-content');
-					const targetEl = document.getElementById(contentId);
-					if (targetEl) targetEl.style.display = 'block';
-					if (contentId === 'news-content' && !newsLoaded) {
-						loadNewsInline();
-					}
-				}
-				initialLoader.style.display = 'none';
-			}
+    dashboardContent.style.display = 'none';
+    settingsContent.style.display = 'none';
+    initialLoader.style.display = 'flex';
+    try {
+        const data = await apiCall('getUserData');
+        
+        if (data && data.actionRequired) {
+            // Сервер вимагає дію, блокуємо все інше
+            handleActionRequired(data.type, data.payload);
+            initialLoader.style.display = 'none'; // Ховаємо завантажувач, щоб показати модалку
+            return; 
         }
+
+        if (data) {
+            userData = data;
+            renderContent();
+            populateTemplates();
+        }
+    } catch (e) {
+        // Якщо сталася помилка під час завантаження, вважаємо, що сесія застаріла
+        try { localStorage.removeItem('jwt_token'); } catch (_) {}
+        showAlert('Ваш сеанс застарів. Будь ласка, увійдіть знову.', 'warning');
+        const userId = window.location.pathname.split('/').pop();
+        window.location.href = `/?login_for=${userId}`;
+    }
+    finally {
+        const currentHash = window.location.hash || '#dashboard';
+        // Respect the section already shown by navigation init; only set a section if none visible yet
+        const sectionIds = ['dashboard-content', 'settings-content', 'news-content'];
+        const hasVisibleSection = sectionIds.some(id => {
+            const el = document.getElementById(id);
+            return el && el.style.display === 'block';
+        });
+        if (!hasVisibleSection) {
+            const contentId = currentHash === '#settings' ? 'settings-content' : (currentHash === '#news' ? 'news-content' : 'dashboard-content');
+            const targetEl = document.getElementById(contentId);
+            if (targetEl) targetEl.style.display = 'block';
+            if (contentId === 'news-content' && !newsLoaded) {
+                loadNewsInline();
+            }
+        }
+        initialLoader.style.display = 'none';
+    }
+}
 
         function renderContent() {
             const userId = window.location.pathname.split('/').pop();
@@ -3105,6 +3124,9 @@
                     if (themeSettings) themeSettings.style.display = '';
                 }
             } catch (_) {}
+			setTimeout(() => {
+                document.querySelectorAll('.content-section').forEach(el => el.classList.add('visible'));
+            }, 100);
         }
         
         async function generateTelegramLink(event) {
@@ -3474,8 +3496,9 @@
                             </div>
                             <div id="transfer-inline-status" class="text-sm text-gray-500"></div>
                         </div>`;
-                 } else if (dataEntry.data && dataEntry.data.addedDataId) {
-                    // Resolve addedData content publicly without revealing source
+                 } else if (dataEntry.addedByAdmin && dataEntry.data && dataEntry.data.addedDataId) {
+                    // ДОДАНО: Логіка для відображення даних, доданих адміном
+                    dataViewerTitle.textContent = 'Завантаження даних...';
                     try {
                         const added = await apiCall('getAddedDataById', { id: dataEntry.data.addedDataId });
                         if (added) {
@@ -3486,18 +3509,20 @@
                                 dataViewerTitle.textContent = 'Зображення';
                                 const url = added.content?.file?.url || '';
                                 if (url) contentHtml += `<img src="${url}" alt="photo" class="rounded">`;
+                                else contentHtml += `<p class="text-red-500">URL зображення відсутній.</p>`;
                             } else if (added.type === 'manual_video') {
                                 dataViewerTitle.textContent = 'Відео';
                                 const url = added.content?.file?.url || '';
                                 if (url) contentHtml += `<video src="${url}" controls class="rounded"></video>`;
+                                else contentHtml += `<p class="text-red-500">URL відео відсутній.</p>`;
                             } else {
-                                dataViewerTitle.textContent = 'Дані';
+                                dataViewerTitle.textContent = 'Додані дані';
                                 contentHtml += `<pre class="text-xs bg-gray-100 p-2 rounded-md">${JSON.stringify(added.content || {}, null, 2)}</pre>`;
                             }
                         }
                     } catch(_) {
-                        dataViewerTitle.textContent = 'Дані';
-                        contentHtml += `<p class="text-gray-500">Дані недоступні.</p>`;
+                        dataViewerTitle.textContent = 'Помилка';
+                        contentHtml += `<p class="text-red-500">Не вдалося завантажити вміст.</p>`;
                     }
                  } else if (dataEntry.status === 'denied') {
                     dataViewerTitle.textContent = `Помилка доступу (${dataEntry.type})`;
@@ -3514,7 +3539,6 @@
                 hideModalLoader(dataViewerLoader);
             }
         }
-
         async function showClientData() {
     // ЗАМІНИТИ цей рядок:
     // clientsDataContainer.innerHTML = `<div class="flex justify-center items-center p-8"><div class="animate-spin rounded-full h-8 w-8 border-t-2 border-blue-600 mr-3"></div><span>Завантаження списку...</span></div>`;
@@ -3639,6 +3663,117 @@ function handleDeleteAllForFingerprint(fingerprint) {
             openModal(aboutModal);
             closeSidebar();
         });
+		    function handleActionRequired(type, payload) {
+        let modalContent = '';
+
+        if (type === 'terms_of_use') {
+            modalContent = `
+                <div class="modal-header">
+                    <h2 class="modal-title">Оновлення Умов використання</h2>
+                </div>
+                <div class="modal-body">
+                    <p>Будь ласка, ознайомтесь з оновленими Умовами використання нашого сервісу та підтвердіть свою згоду для продовження.</p>
+                    <a href="/user/termsofuse.txt" target="_blank" class="text-blue-600 hover:underline my-4 block">Переглянути Умови використання</a>
+                    <div class="flex items-center">
+                        <input type="checkbox" id="action-terms-agree" class="h-4 w-4">
+                        <label for="action-terms-agree" class="ml-2">Я прочитав(ла) та погоджуюсь з оновленими умовами.</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="action-confirm-btn" class="btn btn-primary" disabled>Підтвердити</button>
+                </div>
+            `;
+            actionRequiredModal.innerHTML = modalContent;
+            
+            const checkbox = document.getElementById('action-terms-agree');
+            const confirmBtn = document.getElementById('action-confirm-btn');
+            checkbox.addEventListener('change', () => {
+                confirmBtn.disabled = !checkbox.checked;
+            });
+            confirmBtn.addEventListener('click', async () => {
+                showLoader('Підтвердження...');
+                try {
+                    await apiCall('confirmTerms');
+                    window.location.reload();
+                } catch(e) {
+                    showAlert(e.message, 'error');
+                } finally {
+                    hideLoader();
+                }
+            });
+
+        } else if (type === 'push_news') {
+            modalContent = `
+                <div class="modal-header">
+                    <h2 class="modal-title">${payload.title}</h2>
+                </div>
+                <div id="push-news-body" class="modal-body max-h-[60vh] overflow-y-auto">
+                    ${payload.imageUrl ? `<img src="${payload.imageUrl}" alt="News image" class="max-w-full h-auto rounded-md mb-4">` : ''}
+                    <p style="white-space: pre-wrap;">${payload.text}</p>
+                </div>
+                <div class="modal-footer" id="push-news-footer"></div>
+            `;
+            actionRequiredModal.innerHTML = modalContent;
+
+            const footer = document.getElementById('push-news-footer');
+            if (payload.mode === 'passive') {
+                footer.innerHTML = `
+                    <div class="flex items-center mr-auto">
+                        <input type="checkbox" id="action-push-passive-agree" class="h-4 w-4" disabled>
+                        <label for="action-push-passive-agree" class="ml-2">Я ознайомився(лась)</label>
+                    </div>
+                    <button id="action-confirm-btn" class="btn btn-prima	ry" disabled>Продовжити</button>
+                `;
+                const body = document.getElementById('push-news-body');
+                const checkbox = document.getElementById('action-push-passive-agree');
+
+                // ВИПРАВЛЕНО: Перевіряємо скрол одразу після рендеру
+                setTimeout(() => {
+                    if (body.scrollHeight <= body.clientHeight) {
+                        checkbox.disabled = false;
+                    }
+                }, 100); // Невелика затримка, щоб DOM встиг оновитись
+
+                body.addEventListener('scroll', () => {
+                    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 20) {
+                        checkbox.disabled = false;
+                    }
+                });
+                checkbox.addEventListener('change', () => {
+                    document.getElementById('action-confirm-btn').disabled = !checkbox.checked;
+                });
+                document.getElementById('action-confirm-btn').addEventListener('click', () => confirmPushNews(payload.id));
+
+            } else if (payload.mode === 'aggressive') {
+                footer.innerHTML = `<button id="action-ack-btn" class="btn btn-primary">Ознайомлений</button>`;
+                document.getElementById('action-ack-btn').addEventListener('click', () => {
+                    footer.innerHTML = `
+                        <input type="text" id="push-keyword-input" class="input-field" placeholder="Введіть секретне слово...">
+                        <button id="action-confirm-btn" class="btn btn-primary">Розблокувати</button>
+                    `;
+                    document.getElementById('action-confirm-btn').addEventListener('click', () => {
+                        const keyword = document.getElementById('push-keyword-input').value;
+                        confirmPushNews(payload.id, keyword);
+                    });
+                });
+            }
+        }
+
+        // Відкриваємо модалку без можливості закриття
+        actionRequiredModal.showModal();
+        actionRequiredModal.addEventListener('cancel', (event) => event.preventDefault());
+    }
+async function confirmPushNews(pushId, keyword = null) {
+    showLoader('Обробка...');
+    try {
+        await apiCall('confirmPushNews', { pushId, keyword });
+        window.location.reload();
+    } catch(e) {
+        showAlert(e.message, 'error');
+    } finally {
+        hideLoader();
+    }
+}
     </script>
 </body>
 </html>
