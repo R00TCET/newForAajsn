@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Доступ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" defer></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f0f2f5; margin: 0; padding: 1em; box-sizing: border-box; }
+        .container { background: #fff; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .container.hidden { display: none; }
+        h1, h2 { text-align: center; color: #333; }
+        form { display: flex; flex-direction: column; }
+        input { padding: 12px; margin-bottom: 1rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+        button { padding: 12px; background-color: #007bff; color: white; border: none; border-radius: 4px; font-size: 1rem; cursor: pointer; transition:all; background-color: 0.2s; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #5a9ed8; cursor: not-allowed; }
+        .message { margin-top: 1rem; text-align: center; font-weight: bold; min-height: 1.2em; }
+        .message.success { color: green; }
+        .message.error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="container hidden" id="app-container">
+        <!-- Вміст буде генеруватися динамічно -->
+    </div>
+
+    <script>
+        // Fingerprint loader with fallbacks
+        function loadExternalScript(src) {
+            return new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.async = true;
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        }
+
+        function simpleDeterministicHash(input) {
+            let h = 2166136261 >>> 0; // FNV-1a
+            for (let i = 0; i < input.length; i++) {
+                h ^= input.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return (h >>> 0).toString(16);
+        }
+
+        async function getVisitorId() {
+            // Try existing global first (may be present due to initial script tag)
+            if (window.FingerprintJS && typeof window.FingerprintJS.load === 'function') {
+                try {
+                    const fp = await window.FingerprintJS.load();
+                    const res = await fp.get();
+                    return res.visitorId;
+                } catch {}
+            }
+
+            // Try loading from alternative CDN
+            try {
+                await loadExternalScript('https://openfpcdn.io/fingerprintjs/v3/iife.min.js');
+                if (window.FingerprintJS && typeof window.FingerprintJS.load === 'function') {
+                    const fp = await window.FingerprintJS.load();
+                    const res = await fp.get();
+                    return res.visitorId;
+                }
+            } catch {}
+
+            // Fallback deterministic ID based on browser traits
+            const traits = [
+                navigator.userAgent,
+                navigator.language,
+                screen.width + 'x' + screen.height + 'x' + screen.colorDepth,
+                Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                navigator.platform || '',
+                navigator.vendor || ''
+            ].join('|');
+            return 'fb_' + simpleDeterministicHash(traits);
+        }
+        const container = document.getElementById('app-container');
+        
+        async function main() {
+            const token = localStorage.getItem('jwt_token');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const ownUserId = payload.userId;
+                    
+                    if (ownUserId) {
+                        window.location.href = `/user/${ownUserId}`;
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Invalid token found, removing it:", e);
+                    localStorage.removeItem('jwt_token');
+                }
+            }
+
+            const urlParams = new URLSearchParams(window.location.search);
+            const refCode = urlParams.get('ref');
+            const loginFor = urlParams.get('login_for');
+
+            if (refCode) {
+                await renderRegistration(refCode);
+            } else if (loginFor) {
+                renderLogin(loginFor);
+            } else {
+                renderError('Невірне посилання', 'Доступ до цього сайту можливий лише за спеціальним посиланням.');
+            }
+            container.classList.remove('hidden');
+        }
+
+        async function apiCall(action, payload) {
+            return fetch('/.netlify/functions/public-api', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, payload })
+            });
+        }
+
+        async function renderRegistration(refCode) {
+            container.innerHTML = '<p style="text-align: center;">Перевірка запрошення...</p>';
+            const res = await apiCall('verifyRefCode', { ref: refCode });
+            if (!res.ok) {
+                renderError('Посилання недійсне', await res.text());
+                return;
+            }
+
+            container.innerHTML = `
+                <h2>Створення акаунту</h2>
+                <form id="reg-form">
+                    <input 
+                        type="text" 
+                        id="nickname" 
+                        placeholder="Нікнейм" 
+                        required 
+                        minlength="3" 
+                        maxlength="20"
+                        pattern="^[a-zA-Z0-9]+$"
+                        title="Нікнейм може містити тільки латинські літери та цифри, без пробілів та спецсимволів.">
+                    <input 
+                        type="password" 
+                        id="password" 
+                        placeholder="Пароль (мін. 6 символів)" 
+                        minlength="6" 
+                        required>
+                    <button type="submit">Зареєструватися</button>
+                </form>
+                <p id="message" class="message"></p>`;
+            
+            document.getElementById('reg-form').addEventListener('submit', handleRegistration);
+        }
+        
+        async function handleRegistration(e) {
+            e.preventDefault();
+            const msg = document.getElementById('message');
+            const button = e.target.querySelector('button');
+            button.disabled = true;
+            msg.className = 'message';
+            msg.textContent = 'Обробка...';
+
+            const visitorId = await getVisitorId();
+            
+            const payload = {
+                nickname: document.getElementById('nickname').value,
+                password: document.getElementById('password').value,
+                ref: new URLSearchParams(window.location.search).get('ref'),
+                fingerprint: visitorId
+            };
+
+            const res = await apiCall('register', payload);
+            
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('jwt_token', data.token);
+                msg.className = 'message success';
+                msg.textContent = 'Успіх! Перенаправлення...';
+                setTimeout(() => window.location.href = data.personalPage, 1500);
+            } else {
+                msg.className = 'message error';
+                msg.textContent = await res.text();
+                button.disabled = false;
+            }
+        }
+
+        function renderLogin(userId) {
+            container.innerHTML = `
+                <h2>Вхід у ваш акаунт</h2>
+                <form id="login-form">
+                    <input type="text" id="nickname" placeholder="Нікнейм" required>
+                    <input type="password" id="password" placeholder="Пароль" required>
+                    <button type="submit">Увійти</button>
+                </form>
+                <p id="message" class="message"></p>`;
+            
+            document.getElementById('login-form').addEventListener('submit', (e) => handleLogin(e, userId));
+        }
+        
+        async function handleLogin(e, userId) {
+            e.preventDefault();
+            const msg = document.getElementById('message');
+            const button = e.target.querySelector('button');
+            button.disabled = true;
+            msg.className = 'message';
+            msg.textContent = 'Перевірка...';
+            
+            const visitorId = await getVisitorId();
+            
+            const payload = {
+                userId: userId,
+                nickname: document.getElementById('nickname').value,
+                password: document.getElementById('password').value,
+                fingerprint: visitorId
+            };
+            
+            const res = await apiCall('login', payload);
+
+            if (res.ok) {
+                const { token } = await res.json();
+                localStorage.setItem('jwt_token', token);
+                msg.className = 'message success';
+                msg.textContent = 'Успішно! Перенаправлення...';
+                setTimeout(() => window.location.href = `/user/${userId}`, 1000);
+            } else {
+                msg.className = 'message error';
+                msg.textContent = await res.text();
+                button.disabled = false;
+            }
+        }
+
+        function renderError(title, message) {
+            container.innerHTML = `<h1>${title}</h1><p>${message}</p>`;
+        }
+
+        document.addEventListener('DOMContentLoaded', main);
+    </script>
+</body>
+</html>

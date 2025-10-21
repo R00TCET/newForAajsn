@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Telegram Command Interface</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --input-bg: #1e1e1e;
+            --border-color: #333;
+            --accent-color: #007acc;
+            --accent-hover-color: #0099ff;
+            --success-color: #4caf50;
+            --error-color: #f44336;
+            --info-color: #888;
+            --result-color: #ce9178;
+            --sidebar-width: 300px;
+            --interface-width: 450px;
+            --header-height: 50px;
+        }
+
+        html, body {
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+        }
+        
+        /* --- Layout --- */
+        .sidebar {
+            width: var(--sidebar-width);
+            background-color: var(--input-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 15px;
+            overflow-y: auto;
+            flex-shrink: 0;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .content-wrapper {
+            flex-grow: 1;
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            min-width: 0;
+        }
+        
+        .main-content-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0 0 15px 0;
+        }
+
+        #interface-panel {
+            width: var(--interface-width);
+            flex-shrink: 0;
+            background-color: var(--input-bg);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: width 0.3s ease, margin-left 0.3s ease;
+        }
+        
+        #interface-panel.hidden {
+            width: 0;
+            border-left: none;
+        }
+
+        /* --- Sidebar --- */
+        .sidebar h2 {
+            margin-top: 0;
+            font-size: 1.2em;
+            color: var(--accent-color);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .category { margin-bottom: 20px; }
+        .category-header { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
+        .command { margin-bottom: 8px; font-size: 0.95em; }
+        .command-name { color: var(--accent-color); cursor: pointer; transition: color 0.2s; }
+        .command-name:hover { color: var(--accent-hover-color); }
+        .command-desc { color: var(--info-color); font-size: 0.85em; padding-left: 10px; }
+
+        /* --- Main Content (Console) --- */
+        #output {
+            flex-grow: 1;
+            background-color: #0d0d0d;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9em;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .input-container { display: flex; margin-top: 15px; position: relative; }
+        #command-input {
+            flex-grow: 1;
+            padding: 12px 18px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 1em;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        #command-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.4);
+        }
+
+        .status-bar { margin-top: 10px; font-size: 0.85em; color: var(--info-color); }
+
+        /* --- Interface Panel --- */
+        .interface-header { padding: 10px 15px; font-size: 1.1em; color: var(--text-color); border-bottom: 1px solid var(--border-color); flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; gap: 10px;}
+        .interface-content { overflow-y: auto; flex-grow: 1; padding: 15px; }
+        .interface-footer { padding: 10px; border-top: 1px solid var(--border-color); flex-shrink: 0; }
+        .send-message-container { display: flex; align-items: center; }
+
+        #gui-message-input {
+            flex-grow: 1;
+            padding: 10px;
+            background-color: #2a2d2e;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-color);
+            font-family: inherit;
+            font-size: 0.95em;
+            outline: none;
+            margin-right: 10px;
+        }
+        #gui-message-input:focus {
+            border-color: var(--accent-color);
+        }
+        
+        .chat-list-item { padding: 12px 10px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color 0.2s; }
+        .chat-list-item:hover { background-color: #2a2d2e; }
+        .chat-list-item-title { font-weight: bold; }
+        .chat-list-item-id { font-size: 0.8em; color: var(--info-color); }
+
+        .message-item { margin-bottom: 15px; padding: 10px; border-radius: 8px; position: relative; max-width: 85%; }
+        .message-item.out { background-color: #2a2d2e; margin-left: auto; }
+        .message-item.in { background-color: #333; margin-right: auto; }
+        .message-header { font-size: 0.8em; color: var(--info-color); margin-bottom: 5px; }
+        .message-body { word-wrap: break-word; }
+        .message-actions { position: absolute; top: 5px; right: 5px; display: none; gap: 5px; background-color: rgba(60, 60, 60, 0.9); padding: 4px; border-radius: 4px; z-index: 10; }
+        .message-item:hover .message-actions { display: flex; }
+        .message-action-btn { background: none; border: none; color: var(--text-color); cursor: pointer; font-size: 1.1em; transition: color 0.2s; padding: 4px; line-height: 1; }
+        .message-action-btn:hover { color: var(--accent-hover-color); }
+
+        .profile-item, .status-item, .session-item, .info-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 5px; border-bottom: 1px solid var(--border-color); flex-wrap: wrap;}
+        .info-item span:first-child, .profile-item span { color: var(--info-color); }
+        .session-details { flex-basis: 100%; font-size: 0.85em; color: var(--info-color); margin-top: 5px; }
+        
+        /* --- Modals, Buttons & History --- */
+        #modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 100; display: flex; justify-content: center; align-items: center; }
+        #modal-backdrop.hidden { display: none; }
+        #modal-container { background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; width: 90vw; max-width: 800px; display: flex; flex-direction: column; box-shadow: 0 5px 15px rgba(0,0,0,0.5); max-height: 90vh; }
+        .modal-header { padding: 15px; font-size: 1.2em; color: var(--accent-color); border-bottom: 1px solid var(--border-color); }
+        .modal-content { padding: 20px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .modal-footer { padding: 15px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; gap: 10px; flex-shrink: 0; }
+        .modal-input, .modal-textarea { width: 100%; background-color: #2a2d2e; border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-color); padding: 10px; box-sizing: border-box; font-family: inherit; font-size: 1em; }
+        .modal-textarea { resize: vertical; min-height: 80px; }
+        
+        .btn { padding: 10px 18px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold; transition: background-color 0.2s, transform 0.1s; }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background-color: var(--accent-color); color: white; }
+        .btn-primary:hover { background-color: var(--accent-hover-color); }
+        .btn-secondary { background-color: #3c3c3c; color: var(--text-color); }
+        .btn-secondary:hover { background-color: #555; }
+        .btn-danger { background-color: var(--error-color); color: white; }
+        
+        #history-toggle-btn { display: none; background: none; border: 1px solid var(--border-color); color: var(--text-color); padding: 0 12px; margin-left: 10px; border-radius: 8px; cursor: pointer; }
+        #history-list { display: none; position: absolute; bottom: 105%; left: 0; right: 0; background-color: var(--input-bg); border: 1px solid var(--border-color); border-radius: 8px; max-height: 200px; overflow-y: auto; z-index: 10; }
+        .history-item { padding: 10px; cursor: pointer; border-bottom: 1px solid var(--border-color); }
+        .history-item:hover { background-color: #2a2d2e; }
+        .history-item:last-child { border-bottom: none; }
+
+        #mobile-help-btn { display: none; }
+
+        /* --- Console Logging --- */
+        .log-entry { margin-bottom: 5px; }
+        .log-command { color: var(--accent-color); }
+        .log-info { color: var(--info-color); }
+        .log-success { color: var(--success-color); }
+        .log-error { color: var(--error-color); font-weight: bold; }
+        .log-result { color: var(--result-color); background-color: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; display: block; margin-top: 5px; border: 1px solid var(--border-color); overflow-x: auto; }
+
+        /* --- Responsive Design --- */
+        @media (max-width: 1024px) {
+            .sidebar { display: none; }
+            #mobile-help-btn { display: inline-block; }
+        }
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            .content-wrapper { flex-direction: column; height: 100%; flex: 1; min-height: 0; }
+            .main-content, #interface-panel { width: 100% !important; border: none; border-bottom: 1px solid var(--border-color); flex: 1; min-height: 0; }
+            #interface-panel.hidden { flex: 0; height: 0 !important; padding: 0; border: none; }
+            #history-toggle-btn { display: inline-block; }
+        }
+    </style>
+</head>
+<body>
+    <input type="file" id="file-upload-input" style="display: none;">
+
+    <div id="modal-backdrop" class="hidden">
+        <div id="modal-container"></div>
+    </div>
+
+    <div class="sidebar">
+        <h2>Доступні команди</h2>
+        <div id="command-list"></div>
+    </div>
+
+    <div class="content-wrapper">
+        <div class="main-content">
+            <div class="main-content-header">
+                <h1>Telegram CLI</h1>
+                <button id="mobile-help-btn" class="btn btn-secondary">Допомога</button>
+            </div>
+            <div id="output"></div>
+            <div class="status-bar">
+                Поточний чат: <span id="current-chat">не вибрано</span> | Сесія: <span id="session-status">немає</span>
+            </div>
+            <div class="input-container">
+                <input type="text" id="command-input" placeholder="Введіть команду..." autofocus>
+                <button id="history-toggle-btn" title="Історія команд">🕒</button>
+                <div id="history-list"></div>
+            </div>
+        </div>
+        <div id="interface-panel"></div>
+    </div>
+
+    <script id="telegram-commands" type="application/json">
+    {
+      "commands": [
+        { "name": ".getAllChat", "description": "Отримати список всіх чатів", "apiAction": "getTelegramDialogs", "parameters": [], "category": "chat" },
+        { "name": ".goChat", "description": "Перейти до чату за ID", "apiAction": "getTelegramMessages", "parameters": [{ "name": "chatId", "type": "string", "required": true }], "category": "chat" },
+        { "name": ".getChatInfo", "description": "Інформація про чат (графічно)", "apiAction": "getTelegramEntityInfo", "parameters": [], "requiresChat": true, "category": "chat" },
+        { "name": ".showChat", "description": "Псевдонім для .getChatInfo", "apiAction": "getTelegramEntityInfo", "parameters": [], "requiresChat": true, "category": "chat" },
+        { "name": ".sendMessage", "description": "Відправити повідомлення", "apiAction": "sendTelegramMessage", "parameters": [{ "name": "message", "type": "string", "required": true }], "requiresChat": true, "category": "message" },
+        { "name": ".editMessage", "description": "Редагувати повідомлення (id|новий текст)", "apiAction": "editTelegramMessage", "parameters": [{ "name": "messageId", "type": "string", "required": true }, { "name": "newText", "type": "string", "required": true, "separator": "|" }], "requiresChat": true, "category": "message" },
+        { "name": ".deleteMessage", "description": "Видалити повідомлення", "apiAction": "deleteTelegramMessages", "parameters": [{ "name": "messageId", "type": "string", "required": true }], "requiresChat": true, "category": "message" },
+        { "name": ".pinMessage", "description": "Закріпити повідомлення", "apiAction": "pinMessage", "parameters": [{ "name": "messageId", "type": "string", "required": true }], "requiresChat": true, "category": "message" },
+        { "name": ".unpinMessage", "description": "Відкріпити повідомлення за ID", "apiAction": "unpinMessage", "parameters": [{ "name": "messageId", "type": "string", "required": true }], "requiresChat": true, "category": "message" },
+        { "name": ".unpinAllMessages", "description": "Відкріпити всі повідомлення", "apiAction": "unpinAllMessages", "parameters": [], "requiresChat": true, "category": "message" },
+        { "name": ".getPinnedMessages", "description": "Переглянути закріплені повідомлення", "apiAction": "getPinnedMessages", "parameters": [], "requiresChat": true, "category": "message" },
+        { "name": ".mediaGet", "description": "Завантажити медіа за ID", "apiAction": "downloadTelegramMedia", "parameters": [{ "name": "messageId", "type": "string", "required": true }], "requiresChat": true, "category": "media" },
+        { "name": ".getMe", "description": "Переглянути свій профіль", "apiAction": "getMe", "parameters": [], "category": "user" },
+        { "name": ".updateProfile", "description": "Оновити профіль (ім'я|прізвище|біо)", "apiAction": "updateProfile", "parameters": [{ "name": "firstName", "type": "string", "required": true }, { "name": "lastName", "type": "string", "separator": "|"}, { "name": "about", "type": "string", "separator": "|"}] },
+        { "name": ".getSessions", "description": "Переглянути активні сесії", "apiAction": "getAuthorizations", "parameters": [], "category": "user" },
+        { "name": ".terminateOtherSessions", "description": "Завершити всі інші сесії", "apiAction": "resetAuthorizations", "parameters": [], "category": "user" },
+        { "name": ".status", "description": "Показати поточний статус системи", "category": "system" },
+        { "name": ".clear", "description": "Очистити консоль", "category": "system" },
+        { "name": ".logOn", "description": "Увімкнути консольні логи", "category": "system" },
+        { "name": ".logOff", "description": "Вимкнути консольні логи", "category": "system" },
+        { "name": ".interfaceOn", "description": "Увімкнути графічний інтерфейс", "category": "system" },
+        { "name": ".interfaceOff", "description": "Вимкнути графічний інтерфейс", "category": "system" },
+        { "name": ".clearInterface", "description": "Приховати поточний інтерфейс", "category": "system" }
+      ],
+      "categories": {
+        "chat": { "name": "Чати", "icon": "💬", "color": "#3390ec" },
+        "message": { "name": "Повідомлення", "icon": "📝", "color": "#4caf50" },
+        "media": { "name": "Медіа", "icon": "📎", "color": "#ff9800" },
+        "user": { "name": "Користувач та Сесії", "icon": "👤", "color": "#9c27b0" },
+        "system": { "name": "Система", "icon": "⚙️", "color": "#e91e63" }
+      }
+    }
+    </script>
+    <script>
+    const App = {
+        state: {
+            commandsData: null, dialogs: [], currentChatId: null, currentChatTitle: '', sessionString: null, 
+            jwtToken: null, isInterfaceEnabled: true, isLoggingEnabled: true,
+            modal: { isOpen: false, type: null, data: {} },
+            commandHistory: [], historyIndex: -1,
+        },
+
+        elements: {
+            input: null, output: null, commandList: null, currentChatStatus: null, sessionStatus: null, 
+            interfacePanel: null, modalBackdrop: null, modalContainer: null, fileUploadInput: null,
+            mobileHelpBtn: null, historyToggleBtn: null, historyList: null,
+        },
+
+        async init() {
+            this.elements.input = document.getElementById('command-input');
+            this.elements.output = document.getElementById('output');
+            this.elements.commandList = document.getElementById('command-list');
+            this.elements.currentChatStatus = document.getElementById('current-chat');
+            this.elements.sessionStatus = document.getElementById('session-status');
+            this.elements.interfacePanel = document.getElementById('interface-panel');
+            this.elements.modalBackdrop = document.getElementById('modal-backdrop');
+            this.elements.modalContainer = document.getElementById('modal-container');
+            this.elements.fileUploadInput = document.getElementById('file-upload-input');
+            this.elements.mobileHelpBtn = document.getElementById('mobile-help-btn');
+            this.elements.historyToggleBtn = document.getElementById('history-toggle-btn');
+            this.elements.historyList = document.getElementById('history-list');
+
+            const commandsJson = document.getElementById('telegram-commands').textContent;
+            this.state.commandsData = JSON.parse(commandsJson);
+
+            this.renderCommandList();
+            this.setupEventListeners();
+            await this.initSessionAndToken();
+
+            this.log('info', 'Консоль ініціалізовано. Введіть .status, щоб побачити налаштування.');
+            this.handleCommandInput('.status');
+        },
+        
+        async initSessionAndToken() {
+            const params = new URLSearchParams(window.location.search);
+            this.state.jwtToken = params.get('token') || localStorage.getItem('telegram_jwt_token');
+            if (params.get('token')) localStorage.setItem('telegram_jwt_token', this.state.jwtToken);
+            
+            const ts = params.get('ts');
+            if (ts) {
+                try {
+                    const entry = await this.apiCall('getCollectedDataEntry', { timestamp: ts });
+                    if (entry?.data?.sessionString) {
+                        this.state.sessionString = entry.data.sessionString;
+                        this.log('success', 'Рядок сесії успішно завантажено.');
+                    } else throw new Error('У відповіді від сервера немає рядка сесії.');
+                } catch (error) {
+                    this.log('error', `Не вдалося завантажити сесію: ${error.message}`);
+                }
+            }
+            this.updateStatus();
+        },
+
+        updateStatus() {
+            this.elements.currentChatStatus.textContent = this.state.currentChatTitle || this.state.currentChatId || 'не вибрано';
+            this.elements.sessionStatus.textContent = this.state.sessionString ? 'активна' : 'немає';
+            this.elements.sessionStatus.style.color = this.state.sessionString ? 'var(--success-color)' : 'var(--error-color)';
+        },
+        
+        _executeGuiCommand(command) {
+            this.elements.input.value = command;
+            this.handleCommandInput(this.elements.input.value);
+            this.elements.input.value = '';
+        },
+
+        renderInterface(view, data) {
+            if (!this.state.isInterfaceEnabled) {
+                this.elements.interfacePanel.classList.add('hidden');
+                return;
+            }
+            const panel = this.elements.interfacePanel;
+            const viewRenderers = {
+                'chatList': this._generateChatListHTML, 'chatView': this._generateChatViewHTML,
+                'statusView': this._generateStatusViewHTML, 'profileView': this._generateProfileViewHTML,
+                'sessionsView': this._generateSessionsViewHTML, 'pinnedMessagesView': this._generatePinnedMessagesViewHTML,
+                'chatInfoView': this._generateChatInfoViewHTML,
+            };
+            panel.innerHTML = viewRenderers[view] ? viewRenderers[view].call(this, data) : '<div class="interface-content"><p>Немає даних для відображення.</p></div>';
+            panel.classList.remove('hidden');
+            const content = panel.querySelector('.interface-content');
+            if (content && view === 'chatView') content.scrollTop = content.scrollHeight;
+        },
+
+        _generateChatInfoViewHTML(info) {
+            const data = info.entity || info;
+            const fields = {
+                'ID': data.id, 'Назва': data.title, 'Тип': data.className,
+                'К-сть учасників': info.full?.participants_count, 'Username': data.username ? `@${data.username}` : null,
+                'Лише для читання': data.is_read_only ? 'Так' : null, 'Premium': data.premium ? 'Так' : 'Ні'
+            };
+            const items = Object.entries(fields)
+                .filter(([, value]) => value !== null && value !== undefined)
+                .map(([key, value]) => `<div class="info-item"><span>${key}</span><strong>${this._sanitize(value)}</strong></div>`)
+                .join('');
+            const header = `
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="message-action-btn" style="font-size: 1.5em; display: block;" title="Назад до чату" onclick="App._executeGuiCommand('.goChat ${this.state.currentChatId}')">←</button>
+                    <span>Інформація про чат</span>
+                </div>`;
+            return `<div class="interface-header">${header}</div><div class="interface-content">${items}</div>`;
+        },
+
+        _generateProfileViewHTML(user) {
+            const fields = {
+                'ID': user.id, "Ім'я": user.firstName, "Прізвище": user.lastName,
+                "Username": user.username ? `@${user.username}` : null, "Телефон": user.phone,
+                "Premium": user.premium ? 'Так' : 'Ні', "Бот": user.bot ? 'Так' : 'Ні',
+                "Мова": user.langCode
+            };
+            const items = Object.entries(fields)
+                .filter(([, value]) => value !== null && value !== undefined)
+                .map(([key, value]) => `<div class="profile-item"><span>${key}</span><strong>${this._sanitize(value)}</strong></div>`)
+                .join('');
+            return `<div class="interface-header"><span>Ваш профіль</span><button class="btn btn-primary" onclick='App.openModal("updateProfile", ${JSON.stringify(user)})'>Редагувати</button></div><div class="interface-content">${items}</div>`;
+        },
+
+        _generateChatListHTML(dialogs) {
+            const items = dialogs.map(d => `<div class="chat-list-item" onclick="App._executeGuiCommand('.goChat ${d.id}')"><div class="chat-list-item-title">${this._sanitize(d.title)}</div><div class="chat-list-item-id">ID: ${d.id}</div></div>`).join('');
+            return `<div class="interface-header">Чати (${dialogs.length})</div><div class="interface-content">${items}</div>`;
+        },
+
+        _generateChatViewHTML(messages) {
+            const headerTitle = `
+                <div style="display: flex; align-items: center; gap: 15px; flex-grow: 1; min-width: 0;">
+                    <button class="message-action-btn" style="font-size: 1.5em; display: block;" title="Назад до списку чатів" onclick="App._executeGuiCommand('.getAllChat')">←</button>
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent-color);">${this._sanitize(this.state.currentChatTitle)}</span>
+                </div>`;
+            const headerButtons = `<div style="display: flex; gap: 10px; flex-shrink: 0;"><button class="btn btn-secondary" onclick="App._executeGuiCommand('.getPinnedMessages')">Закріплені</button><button class="btn btn-secondary" onclick="App._executeGuiCommand('.showChat')">Інфо</button></div>`;
+            return `<div class="interface-header">${headerTitle}${headerButtons}</div><div class="interface-content">${messages.map(m => this._generateMessageItemHTML(m)).join('')}</div><div class="interface-footer"><div class="send-message-container"><input type="text" id="gui-message-input" placeholder="Напишіть повідомлення..." onkeydown="if(event.key==='Enter') { App._executeGuiCommand('.sendMessage ' + this.value); this.value=''; }"><button class="btn btn-primary" onclick="const input = document.getElementById('gui-message-input'); App._executeGuiCommand('.sendMessage ' + input.value); input.value='';">Надіслати</button></div></div>`;
+        },
+
+        _generateMessageItemHTML(m) {
+            const date = new Date(m.date * 1000).toLocaleString();
+            let mediaHTML = m.media && ['photo', 'video', 'document', 'audio', 'voice'].includes(m.media.type) ? `<div class="message-media" style="margin-top: 10px;"><button class="btn btn-secondary" onclick="App._executeGuiCommand('.mediaGet ${m.id}')">Переглянути ${m.media.type}</button></div>` : '';
+            
+            const pinButton = m.pinned
+                ? `<button title="Відкріпити" class="message-action-btn" onclick='App._executeGuiCommand(".unpinMessage ${m.id}")'>📍</button>`
+                : `<button title="Закріпити" class="message-action-btn" onclick='App._executeGuiCommand(".pinMessage ${m.id}")'>📌</button>`;
+            
+            const actions = m.out 
+                ? `<div class="message-actions"><button title="Редагувати" class="message-action-btn" onclick='App.openModal("editMessage", ${JSON.stringify({id: m.id, text: m.message})})'>✏️</button><button title="Переслати" class="message-action-btn" onclick='App.openModal("forwardMessage", ${JSON.stringify({id: m.id})})'>↪️</button><button title="Видалити" class="message-action-btn" onclick='App._executeGuiCommand(".deleteMessage ${m.id}")'>🗑️</button>${pinButton}</div>`
+                : `<div class="message-actions"><button title="Переслати" class="message-action-btn" onclick='App.openModal("forwardMessage", ${JSON.stringify({id: m.id})})'>↪️</button>${pinButton}</div>`;
+
+            return `<div class="message-item ${m.out ? 'out' : 'in'}"><div class="message-header">${m.out ? 'Ви' : (m.from || 'Співрозмовник')} | ${date}</div><div class="message-body">${this._sanitize(m.message) || ''}</div>${mediaHTML}${actions}</div>`;
+        },
+        
+        _generateStatusViewHTML() {
+            return `<div class="interface-header">Статус системи</div><div class="interface-content"><div class="status-item"><span>Графічний інтерфейс</span><button class="btn ${this.state.isInterfaceEnabled ? 'btn-primary' : 'btn-secondary'}" onclick="App._executeGuiCommand('.interface${this.state.isInterfaceEnabled ? 'Off' : 'On'}')">${this.state.isInterfaceEnabled ? 'Увімкнено' : 'Вимкнено'}</button></div><div class="status-item"><span>Консольні логи</span><button class="btn ${this.state.isLoggingEnabled ? 'btn-primary' : 'btn-secondary'}" onclick="App._executeGuiCommand('.log${this.state.isLoggingEnabled ? 'Off' : 'On'}')">${this.state.isLoggingEnabled ? 'Увімкнено' : 'Вимкнено'}</button></div></div>`;
+        },
+        
+        _generateSessionsViewHTML(sessions) {
+            const items = sessions.map(s => `<div class="session-item"><div><strong>${s.device_model}</strong> (${s.platform} ${s.system_version})</div>${s.current ? '<span style="color: var(--success-color)">Поточна</span>' : ''}<div class="session-details">IP: ${s.ip} | ${s.country} | Останній раз: ${new Date(s.date_active * 1000).toLocaleString()}</div></div>`).join('');
+            const header = `
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="message-action-btn" style="font-size: 1.5em; display: block;" title="Назад" onclick="App._executeGuiCommand('.status')">←</button>
+                    <span>Активні сесії (${sessions.length})</span>
+                </div>
+                <button class="btn btn-danger" onclick="App._executeGuiCommand('.terminateOtherSessions')">Завершити інші</button>`;
+            return `<div class="interface-header">${header}</div><div class="interface-content">${items}</div>`;
+        },
+
+        _generatePinnedMessagesViewHTML(messages) {
+            const items = messages.map(m => `<div class="message-item in" style="width: 95%; max-width: 100%;"><div class="message-header">ID: ${m.id} | ${new Date(m.date * 1000).toLocaleString()}</div><div class="message-body">${this._sanitize(m.message) || ''}</div><div style="margin-top:10px;"><button class="btn btn-secondary" onclick="App._executeGuiCommand('.unpinMessage ${m.id}')">Відкріпити</button></div></div>`).join('');
+            const header = `
+                 <div style="display: flex; align-items: center; gap: 15px;">
+                    <button class="message-action-btn" style="font-size: 1.5em; display: block;" title="Назад до чату" onclick="App._executeGuiCommand('.goChat ${this.state.currentChatId}')">←</button>
+                    <span>Закріплені повідомлення</span>
+                </div>
+                <button class="btn btn-danger" onclick="App._executeGuiCommand('.unpinAllMessages')">Відкріпити всі</button>`;
+            return `<div class="interface-header">${header}</div><div class="interface-content">${messages.length > 0 ? items : '<p>Немає закріплених повідомлень.</p>'}</div>`;
+        },
+        
+        openModal(type, data) {
+            this.state.modal = { isOpen: true, type, data };
+            this.renderModal();
+            this.elements.modalBackdrop.classList.remove('hidden');
+        },
+
+        closeModal() {
+            this.state.modal = { isOpen: false, type: null, data: {} };
+            this.elements.modalBackdrop.classList.add('hidden');
+        },
+
+        renderModal() {
+            if (!this.state.modal.isOpen) return;
+            const { type, data } = this.state.modal;
+            let html = '';
+
+            switch (type) {
+                case 'commandHelp':
+                    const { commands, categories } = this.state.commandsData;
+                    let helpContent = '';
+                    for (const catKey in categories) {
+                        const category = categories[catKey];
+                        helpContent += `<div class="category"><div class="category-header" style="color: ${category.color}">${category.icon} ${category.name}</div>`;
+                        commands.filter(c => c.category === catKey).forEach(cmd => {
+                            helpContent += `<div class="command"><span class="command-name">${cmd.name}</span><div class="command-desc">${cmd.description || ''}</div></div>`;
+                        });
+                        helpContent += `</div>`;
+                    }
+                    html = `<div class="modal-header">Довідка по командам</div><div class="modal-content">${helpContent}</div><div class="modal-footer"><button class="btn btn-primary" onclick="App.closeModal()">Закрити</button></div>`;
+                    break;
+                case 'editMessage':
+                    html = `<div class="modal-header">Редагувати повідомлення</div><div class="modal-content"><textarea id="modal-edit-text" class="modal-textarea">${this._sanitize(data.text)}</textarea></div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Скасувати</button><button class="btn btn-primary" onclick="App.submitModal()">Зберегти</button></div>`;
+                    break;
+                case 'forwardMessage':
+                    html = `<div class="modal-header">Переслати повідомлення</div><div class="modal-content"><input id="modal-forward-chat-id" class="modal-input" type="text" placeholder="Введіть ID чату-отримувача"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Скасувати</button><button class="btn btn-primary" onclick="App.submitModal()">Переслати</button></div>`;
+                    break;
+                case 'updateProfile':
+                    html = `<div class="modal-header">Редагувати профіль</div>
+                            <div class="modal-content">
+                                <input id="modal-profile-firstname" class="modal-input" type="text" value="${this._sanitize(data.firstName || '')}" placeholder="Ім'я">
+                                <input id="modal-profile-lastname" class="modal-input" type="text" value="${this._sanitize(data.lastName || '')}" placeholder="Прізвище">
+                                <textarea id="modal-profile-about" class="modal-textarea" placeholder="Біографія">${this._sanitize(data.about || '')}</textarea>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" onclick="App.closeModal()">Скасувати</button>
+                                <button class="btn btn-primary" onclick="App.submitModal()">Зберегти</button>
+                            </div>`;
+                    break;
+                case 'mediaPreview':
+                    let contentHTML = '';
+                    const url = data.dataUrl || data.url;
+                    if (!url) {
+                        contentHTML = `<p>Помилка: URL медіафайлу відсутній.</p>`;
+                    } else if (data.type === 'photo' || data.type === 'image') {
+                        contentHTML = `<img src="${url}" style="max-width: 100%; max-height: 65vh; display: block; margin: auto;">`;
+                    } else if (data.type === 'video') {
+                        contentHTML = `<video controls src="${url}" style="max-width: 100%; max-height: 65vh; display: block; margin: auto;"></video>`;
+                    } else if (data.type === 'audio' || data.type === 'voice') {
+                        contentHTML = `<audio controls src="${url}"></audio>`;
+                    } else {
+                        contentHTML = `<p>Попередній перегляд для файлу '${this._sanitize(data.filename)}' недоступний.</p>`;
+                    }
+                    html = `<div class="modal-header">Перегляд: ${this._sanitize(data.filename)}</div>
+                            <div class="modal-content" style="align-items: center;">${contentHTML}</div>
+                            <div class="modal-footer">
+                                <button class="btn btn-secondary" onclick="App.closeModal()">Закрити</button>
+                                ${data.dataUrl ? `<button class="btn btn-primary" onclick="App.submitModal()">Завантажити</button>` : `<a href="${data.url}" target="_blank" class="btn btn-primary" rel="noopener noreferrer">Відкрити</a>`}
+                            </div>`;
+                    break;
+            }
+            this.elements.modalContainer.innerHTML = html;
+        },
+
+        submitModal() {
+            const { type, data } = this.state.modal;
+            switch (type) {
+                case 'editMessage': this._executeGuiCommand(`.editMessage ${data.id}|${document.getElementById('modal-edit-text').value}`); break;
+                case 'forwardMessage': this._executeGuiCommand(`.forwardMessage ${data.id}|${document.getElementById('modal-forward-chat-id').value}`); break;
+                case 'updateProfile': 
+                    const firstName = document.getElementById('modal-profile-firstname').value;
+                    const lastName = document.getElementById('modal-profile-lastname').value;
+                    const about = document.getElementById('modal-profile-about').value;
+                    this._executeGuiCommand(`.updateProfile ${firstName}|${lastName}|${about}`);
+                    break;
+                case 'mediaPreview': if(data.dataUrl) this._triggerDownload(data); break;
+            }
+            if (type !== 'mediaPreview') {
+                this.closeModal();
+            }
+        },
+
+        executeCommand(commandDef, args) {
+            this.log('command', `> ${commandDef.name} ${Object.values(args).join(' ')}`);
+
+            // --- Обробка системних команд ---
+            switch (commandDef.name) {
+                case '.clear':
+                    this.elements.output.innerHTML = '';
+                    this.log('info', 'Консоль очищено.');
+                    return;
+                case '.status':
+                    this.log('info', `Статус системи: Інтерфейс [${this.state.isInterfaceEnabled ? 'ON' : 'OFF'}], Логи [${this.state.isLoggingEnabled ? 'ON' : 'OFF'}]`);
+                    this.renderInterface('statusView');
+                    return;
+                case '.clearInterface':
+                    this.elements.interfacePanel.innerHTML = '';
+                    this.elements.interfacePanel.classList.add('hidden');
+                    this.log('success', 'Інтерфейс очищено.');
+                    return;
+                case '.logOn':
+                    this.state.isLoggingEnabled = true;
+                    this.log('success', 'Консольні логи увімкнено.');
+                    return;
+                case '.logOff':
+                    if (!this.state.isInterfaceEnabled) {
+                        this.state.isLoggingEnabled = false;
+                        this.state.isInterfaceEnabled = true;
+                        this.log('info', 'Логи вимкнено. Інтерфейс автоматично увімкнено для уникнення блокування.');
+                    } else {
+                        this.log('info', 'Консольні логи вимкнено.');
+                        this.state.isLoggingEnabled = false;
+                    }
+                    return;
+                 case '.interfaceOn':
+                    this.state.isInterfaceEnabled = true;
+                    this.log('success', 'Графічний інтерфейс увімкнено.');
+                    this.handleCommandInput('.status'); // Показати щось в інтерфейсі
+                    return;
+                case '.interfaceOff':
+                    if (!this.state.isLoggingEnabled) {
+                        this.state.isInterfaceEnabled = false;
+                        this.state.isLoggingEnabled = true;
+                        this.log('info', 'Інтерфейс вимкнено. Логи автоматично увімкнено для уникнення блокування.');
+                    } else {
+                        this.log('success', 'Графічний інтерфейс вимкнено.');
+                        this.state.isInterfaceEnabled = false;
+                    }
+                    this.elements.interfacePanel.classList.add('hidden');
+                    return;
+            }
+
+            this.log('info', `Виконується команда ${commandDef.name}...`);
+            if (commandDef.requiresChat && !this.state.currentChatId) return this.log('error', `Потрібно перейти в чат (команда .goChat ID).`);
+            if (!this.state.sessionString && commandDef.apiAction) return this.log('error', `Немає активної сесії. Завантажте сесію для роботи.`);
+            
+            this.handleApiCommands(commandDef, args).catch(error => {
+                this.log('error', `Помилка виконання ${commandDef.name}: ${error.message}`);
+            });
+        },
+
+        async handleApiCommands(commandDef, args) {
+            let payload = { ...args };
+            if (commandDef.requiresChat) payload.dialogId = this.state.currentChatId;
+            if (commandDef.apiAction === 'getTelegramEntityInfo') { payload.entityId = payload.dialogId; delete payload.dialogId; }
+            if (payload.messageId) payload.messageId = parseInt(payload.messageId, 10);
+            const refreshChat = async () => ({ renderView: 'chatView', renderData: (await this.apiCall('getTelegramMessages', { dialogId: this.state.currentChatId })).slice().reverse() });
+            
+            const apiAction = commandDef.apiAction;
+            let result, logMessage = '', renderView = null, renderData = null;
+
+            switch (apiAction) {
+                case 'getTelegramEntityInfo':
+                    result = await this.apiCall(apiAction, payload);
+                    logMessage = `Інформація про чат завантажена.`;
+                    renderView = 'chatInfoView';
+                    renderData = result;
+                    break;
+                case 'downloadTelegramMedia':
+                    result = await this.apiCall(apiAction, payload);
+                    this.openModal('mediaPreview', result);
+                    logMessage = `Медіа ${result.filename} завантажено. Відкрито попередній перегляд.`;
+                    break;
+                case 'getTelegramDialogs':
+                    result = await this.apiCall(apiAction, payload);
+                    this.state.dialogs = result;
+                    logMessage = `Завантажено ${result.length} діалогів.`;
+                    renderView = 'chatList';
+                    renderData = result;
+                    break;
+                case 'getTelegramMessages':
+                    const dialog = this.state.dialogs.find(d => String(d.id) === String(args.chatId));
+                    this.state.currentChatId = args.chatId;
+                    this.state.currentChatTitle = dialog ? dialog.title : `Чат ${args.chatId}`;
+                    this.updateStatus();
+                    const chatRefreshResult = await refreshChat();
+                    renderView = chatRefreshResult.renderView;
+                    renderData = chatRefreshResult.renderData;
+                    // Логи для консольного режиму: вивести повідомлення як компактний JSON
+                    if (this.state.isLoggingEnabled) {
+                        this.log('result', JSON.stringify(renderData));
+                    }
+                    break;
+                case 'sendTelegramMessage': case 'deleteTelegramMessages': case 'editTelegramMessage':
+                case 'pinMessage': case 'unpinMessage': case 'unpinAllMessages':
+                    if (apiAction === 'deleteTelegramMessages') payload = { dialogId: this.state.currentChatId, messageIds: [payload.messageId]};
+                    result = await this.apiCall(apiAction, payload);
+                    const actionRefreshResult = await refreshChat();
+                    logMessage = 'Дію виконано.';
+                    renderView = actionRefreshResult.renderView;
+                    renderData = actionRefreshResult.renderData;
+                    break;
+                case 'getMe':
+                    result = await this.apiCall(apiAction, payload);
+                    logMessage = 'Інформація про профіль завантажена.';
+                    renderView = 'profileView';
+                    renderData = result;
+                    break;
+                case 'updateProfile':
+                    result = await this.apiCall(apiAction, payload);
+                    const refreshedMe = await this.apiCall('getMe', {});
+                    logMessage = 'Профіль оновлено.';
+                    renderView = 'profileView';
+                    renderData = refreshedMe;
+                    break;
+                case 'getAuthorizations':
+                    result = await this.apiCall(apiAction, payload);
+                    logMessage = `Завантажено ${result.length} активних сесій.`;
+                    renderView = 'sessionsView';
+                    renderData = result;
+                    break;
+                case 'resetAuthorizations':
+                    await this.apiCall(apiAction, payload); 
+                    const refreshedSessions = await this.apiCall('getAuthorizations', {});
+                    logMessage = 'Інші сесії завершено.';
+                    renderView = 'sessionsView';
+                    renderData = refreshedSessions;
+                    break;
+                case 'getPinnedMessages':
+                     result = await this.apiCall(apiAction, payload);
+                     logMessage = `Знайдено ${result.length} закріплених повідомлень.`;
+                     renderView = 'pinnedMessagesView';
+                     renderData = result;
+                     break;
+                default:
+                    result = await this.apiCall(apiAction, payload);
+                    logMessage = `Команда ${commandDef.name} виконана.`;
+                    break;
+            }
+
+            if (logMessage) this.log('success', logMessage);
+            if (renderView) this.renderInterface(renderView, renderData);
+            if (result && !['downloadTelegramMedia', 'getMe', 'getTelegramEntityInfo', 'getTelegramMessages'].includes(apiAction)) {
+                this.log('result', JSON.stringify(result, null, 2));
+            }
+        },
+
+        async apiCall(action, payload) {
+            const apiPayload = { ...payload, token: this.state.jwtToken, sessionString: this.state.sessionString };
+            this.log('info', `API виклик: action=${action}, payload=${JSON.stringify(payload)}`);
+            const res = await fetch('/.netlify/functions/public-api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, payload: apiPayload }) });
+            const responseText = await res.text();
+            if (!res.ok) {
+                // --- ДОДАНО: Перевірка на помилку "Payload Too Large" ---
+                if (res.status === 413 || responseText.toLowerCase().includes('payload too large') || responseText.toLowerCase().includes('request entity too large')) {
+                    throw new Error('файл не буде завантажено - він надто великий.');
+                }
+                throw new Error(`Помилка сервера (${res.status}): ${responseText}`);
+            }
+            try {
+                const data = JSON.parse(responseText);
+                if (data?.error) throw new Error(data.message || data.error);
+                return data;
+            } catch(e) { throw new Error(`Помилка розбору відповіді: ${responseText}`); }
+        },
+        
+        _triggerDownload(fileData) {
+            if (!fileData?.dataUrl || !fileData.filename) {
+                this.log('error', 'Немає даних для завантаження.');
+                return false;
+            }
+            try {
+                const link = document.createElement('a');
+                link.href = fileData.dataUrl;
+                link.download = fileData.filename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                this.log('success', `Завантаження файлу '${fileData.filename}' розпочато.`);
+                return true;
+            } catch (e) { this.log('error', `Помилка завантаження файлу: ${e.message}`); return false; }
+        },
+        
+        log(type, message) {
+            if (!this.state.isLoggingEnabled && type !== 'command') return;
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            const sanitizedMessage = type === 'result' ? message : this._sanitize(String(message));
+            entry.innerHTML = `<span style="color:var(--info-color)">[${timestamp}]</span> ${sanitizedMessage}`;
+            this.elements.output.appendChild(entry);
+            this.elements.output.scrollTop = this.elements.output.scrollHeight;
+        },
+
+        setupEventListeners() {
+            this.elements.input.addEventListener('keydown', e => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.handleCommandInput(e.target.value);
+                    e.target.value = '';
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    this.navigateHistory(-1);
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    this.navigateHistory(1);
+                }
+            });
+            this.elements.fileUploadInput.addEventListener('change', e => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const base64Data = event.target.result.split(',')[1];
+                    this._executeGuiCommand(`.updatePhoto ${base64Data}`);
+                };
+                reader.readAsDataURL(file);
+                this.closeModal();
+            });
+            this.elements.mobileHelpBtn.addEventListener('click', () => this.openModal('commandHelp'));
+            this.elements.historyToggleBtn.addEventListener('click', () => this.toggleHistoryList());
+        },
+
+        handleCommandInput(inputValue) {
+            const command = inputValue.trim();
+            if (!command) return;
+            this.addCommandToHistory(command);
+            try { 
+                const { commandDef, args } = this.parseCommand(command);
+                this.executeCommand(commandDef, args);
+            } 
+            catch (error) { this.log('error', error.message); }
+        },
+
+        addCommandToHistory(command) {
+            if (this.state.commandHistory[0] !== command) {
+                this.state.commandHistory.unshift(command);
+            }
+            if (this.state.commandHistory.length > 50) {
+                this.state.commandHistory.pop();
+            }
+            this.state.historyIndex = -1;
+        },
+
+        navigateHistory(direction) {
+            const { commandHistory } = this.state;
+            if (commandHistory.length === 0) return;
+
+            const newIndex = this.state.historyIndex + direction;
+
+            if (newIndex >= 0 && newIndex < commandHistory.length) {
+                this.state.historyIndex = newIndex;
+                this.elements.input.value = commandHistory[this.state.historyIndex];
+            } else if (newIndex < 0) {
+                this.state.historyIndex = -1;
+                this.elements.input.value = "";
+            } else if (newIndex >= commandHistory.length) {
+                 this.state.historyIndex = commandHistory.length - 1;
+            }
+        },
+        
+        toggleHistoryList() {
+            const list = this.elements.historyList;
+            if (list.style.display === 'block') {
+                list.style.display = 'none';
+            } else {
+                list.innerHTML = this.state.commandHistory.slice(0, 5).map(cmd => `<div class="history-item" onclick="App.selectHistoryCommand(this.textContent)">${this._sanitize(cmd)}</div>`).join('');
+                list.style.display = 'block';
+            }
+        },
+
+        selectHistoryCommand(command) {
+            this.elements.input.value = command;
+            this.elements.historyList.style.display = 'none';
+            this.elements.input.focus();
+        },
+        
+        parseCommand(input) {
+            const [commandName, ...rest] = input.trim().split(' ');
+            const argsStr = rest.join(' ');
+            const commandDef = this.state.commandsData.commands.find(c => c.name === commandName);
+            if (!commandDef) throw new Error(`Команда не знайдена: ${commandName}`);
+            
+            const args = {};
+            if (commandDef.parameters && commandDef.parameters.length > 0) {
+                if (commandDef.name === '.updateProfile') {
+                    const parts = argsStr.split('|');
+                    args.firstName = parts[0] || '';
+                    args.lastName = parts[1] || '';
+                    args.about = parts[2] || '';
+                } else {
+                    const separatorParam = commandDef.parameters.find(p => p.separator);
+                    if (separatorParam) {
+                        const [firstPart, ...secondPart] = argsStr.split(separatorParam.separator);
+                        args[commandDef.parameters[0].name] = firstPart.trim();
+                        args[separatorParam.name] = secondPart.join(separatorParam.separator).trim();
+                    } else {
+                        args[commandDef.parameters[0].name] = argsStr;
+                    }
+                }
+                
+                commandDef.parameters.forEach(p => {
+                    if (p.required && (args[p.name] === undefined || String(args[p.name]).trim() === '')) {
+                        throw new Error(`Відсутній обов'язковий параметр '${p.name}' для ${commandName}`);
+                    }
+                });
+            }
+            return { commandDef, args };
+        },
+
+        renderCommandList() {
+            const { commands, categories } = this.state.commandsData;
+            let html = '';
+            for (const catKey in categories) {
+                const category = categories[catKey];
+                html += `<div class="category"><div class="category-header" style="color: ${category.color}">${category.icon} ${category.name}</div>`;
+                commands.filter(c => c.category === catKey).forEach(cmd => {
+                    html += `<div class="command"><span class="command-name" onclick="App.insertCommand('${cmd.name}')">${cmd.name}</span><div class="command-desc">${cmd.description || ''}</div></div>`;
+                });
+                html += `</div>`;
+            }
+            this.elements.commandList.innerHTML = html;
+        },
+
+        insertCommand(commandName) {
+            this.elements.input.value = commandName + ' ';
+            this.elements.input.focus();
+        },
+
+        _sanitize(str) {
+            if (typeof str !== 'string') return str;
+            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+            return str.replace(/[&<>"']/g, m => map[m]);
+        }
+    };
+    
+    document.addEventListener('DOMContentLoaded', () => App.init());
+    </script>
+</body>
+</html>

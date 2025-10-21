@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Адмін-панель</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --background-color: #f8f9fa;
+            --content-background-color: #ffffff;
+            --primary-color: #4f46e5;
+            --primary-color-hover: #4338ca;
+            --danger-color: #ef4444;
+            --danger-color-hover: #dc2626;
+            --success-color: #22c55e;
+            --border-color: #e5e7eb;
+            --text-color-primary: #1f2937;
+            --text-color-secondary: #6b7280;
+            --input-background-color: #f9fafb;
+            --sidebar-width: 260px;
+            
+            /* --- NEW: Variables for Modal Styling from User Page --- */
+            --modal-background-color: var(--content-background-color);
+            --modal-text-color: var(--text-color-primary);
+            --modal-close-btn-background: #ffffff;
+            --modal-close-btn-color: #1f2937;
+            --modal-close-btn-hover-background: #f3f4f6;
+            --modal-close-btn-hover-color: #1f2937;
+            --button-secondary-hover-color: #e5e7eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color-primary);
+            padding: 1rem;
+        }
+        
+        /* Prevent background scroll when modal is open */
+        html.modal-open, body.modal-open { 
+            overflow: hidden; 
+        }
+
+        /* --- LAYOUT & SECTIONS --- */
+        .container {
+            max-width: 1400px;
+            margin: 1rem auto;
+        }
+        
+        main > header {
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            font-weight: 700;
+            color: var(--text-color-primary);
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h2 { font-size: clamp(1.25rem, 3vw, 1.5rem); font-weight: 600; margin-bottom: 1rem; }
+        h3 { font-size: 1.125rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+        h4 { font-size: 1rem; font-weight: 600; margin-bottom: 0.5rem; }
+
+        .brand-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            flex-shrink: 0;
+        }
+
+        section {
+            background: var(--content-background-color);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
+        }
+        
+        /* --- BUTTONS --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .btn svg { width: 16px; height: 16px; }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 7px 14px rgba(0,0,0,0.07), 0 3px 6px rgba(0,0,0,0.05);
+        }
+        .btn:disabled {
+            background-color: #e5e7eb;
+            cursor: not-allowed;
+            border-color: #e5e7eb;
+            color: #9ca3af;
+        }
+
+        .btn-primary { background-color: var(--primary-color); color: #fff; border-color: var(--primary-color); }
+        .btn-primary:hover:not(:disabled) { background-color: var(--primary-color-hover); border-color: var(--primary-color-hover); }
+        
+        .btn-danger { background-color: var(--danger-color); color: #fff; border-color: var(--danger-color); }
+        .btn-danger:hover:not(:disabled) { background-color: var(--danger-color-hover); border-color: var(--danger-color-hover); }
+
+        .btn-secondary {
+            background-color: #fff;
+            color: var(--text-color-primary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-secondary:hover:not(:disabled) { background-color: #f9fafb; border-color: #d1d5db; }
+
+        /* --- TABLES --- */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+            vertical-align: middle;
+        }
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: var(--text-color-secondary);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:nth-child(even) { background-color: #f9fafb; }
+
+        .status-active { color: var(--success-color); font-weight: 600; }
+        .status-suspended, .status-blocked, .status-bot_blocked { color: var(--danger-color); font-weight: 600; }
+        .status-pending { color: #f59e0b; font-weight: 600; }
+
+        /* --- FORMS --- */
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-primary); font-size: 0.875rem; }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: var(--input-background-color);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .form-group textarea { min-height: 120px; resize: vertical; }
+
+        .form-grid {
+            display: grid;
+            gap: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            .form-grid-2 { grid-template-columns: repeat(2, 1fr); }
+            .form-grid-3 { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        /* --- MODALS (dialog) - UPDATED STYLES --- */
+        dialog {
+            background-color: var(--modal-background-color);
+            color: var(--modal-text-color);
+            border-radius: 16px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+            border: none;
+            padding: 0;
+            animation: fadeIn 200ms ease-in-out;
+            position: relative; 
+            margin: auto;
+            width: min(92vw, 900px);
+        }
+        
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: scale(0.95); } 
+            to { opacity: 1; transform: scale(1); } 
+        }
+        
+        dialog::backdrop {
+            background-color: rgba(17, 24, 39, 0.6);
+            backdrop-filter: blur(4px);
+        }
+
+        .modal-header, .modal-body, .modal-footer {
+            background-color: transparent;
+            color: inherit;
+        }
+        
+        .modal-header {
+            padding: 24px 32px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .modal-header h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .close-button, .modal-close-btn {
+            background: var(--modal-close-btn-background); 
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--modal-close-btn-color);
+            font-size: 1.5rem;
+            line-height: 1;
+            transition: all 0.2s;
+            flex-shrink: 0;
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .close-button:hover, .modal-close-btn:hover {
+            background: var(--modal-close-btn-hover-background);
+            color: var(--modal-close-btn-hover-color);
+        }
+        
+        .modal-body { 
+            padding: 32px; 
+            max-height: 75vh; 
+            overflow-y: auto; 
+        }
+        
+        .modal-footer {
+            padding: 24px 32px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            background-color: transparent;
+            border-bottom-left-radius: 16px;
+            border-bottom-right-radius: 16px;
+        }
+        
+        /* --- SPECIFIC COMPONENTS --- */
+        .danger-zone {
+            border: 1px solid var(--danger-color);
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+            border-radius: 12px;
+            background-color: #fef2f2;
+        }
+        .danger-zone h4 { color: #991b1b; }
+
+        .pagination-controls { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 1rem; }
+
+        #data-viewer-content img, #data-viewer-content video { max-width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid var(--border-color); }
+        #data-viewer-content .data-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; }
+        #data-viewer-content .data-grid strong { font-weight: 500; color: var(--text-color-secondary); }
+
+        /* --- SPECIFIC INPUT ENHANCEMENTS --- */
+        #delete-added-id {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background-color: var(--input-background-color);
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-width: 220px;
+        }
+        #delete-added-id:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+
+        /* --- GLOBAL LOADER --- */
+        #global-loader {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            background-color: #fff; padding: 12px 24px; border-radius: 50px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1), 0 4px 6px rgba(0,0,0,0.07);
+            display: none; align-items: center; gap: 12px; z-index: 99999;
+            pointer-events: none;
+        }
+        .loader-spinner {
+            width: 20px; height: 20px; border: 2px solid var(--primary-color);
+            border-top-color: transparent; border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* --- RESPONSIVE DESIGN --- */
+        @media (max-width: 768px) {
+            body { padding: 0.5rem; }
+            .container { margin: 0.5rem; }
+            section { padding: 1rem; }
+            
+            .modal-header, .modal-body, .modal-footer {
+                padding: 16px 20px;
+            }
+
+            .actions-cell { min-width: 150px; } /* Prevent action buttons from wrapping too soon */
+            
+            .form-grid, .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+            
+            #news-form {
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* Make data tables more readable on small screens */
+            table { font-size: 0.8rem; }
+            th, td { white-space: normal; padding: 10px 12px; }
+
+            /* Stack the action row in the news form */
+            #news-form > div:last-child {
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.75rem !important;
+            }
+            #news-form > div:last-child .btn { width: 100%; }
+            #news-form > div:last-child input#delete-added-id { width: 100%; min-width: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="global-loader">
+        <div class="loader-spinner"></div>
+        <span id="loader-message">Виконується...</span>
+    </div>
+
+    <main class="container">
+        <header>
+            <h1><span class="brand-dot"></span> Панель керування</h1>
+        </header>
+        <div id="prompt-container"><p>Введіть ключ доступу для завантаження даних.</p></div>
+        <div id="admin-content" style="display:none;"></div>
+    </main>
+
+    <dialog id="user-details-modal">
+        <div class="modal-header">
+            <h2 id="modal-title">Деталі користувача</h2>
+            <button class="close-button" onclick="document.getElementById('user-details-modal').close()">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body-content"></div>
+    </dialog>
+
+    <dialog id="page-editor-admin-modal">
+        <div class="modal-header">
+            <h2>Редактор сторінки</h2>
+            <button class="close-button" onclick="document.getElementById('page-editor-admin-modal').close()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label for="editor-source">Джерело</label>
+                    <select id="editor-source">
+                        <option value="template">Шаблон</option>
+                        <option value="custom">Свій HTML</option>
+                    </select>
+                </div>
+                <div class="form-group" id="editor-template-group">
+                    <label for="editor-template">Виберіть шаблон</label>
+                    <select id="editor-template"></select>
+                </div>
+            </div>
+            <div class="form-group" id="editor-html-group" style="display:none;">
+                <label for="editor-html">HTML-код</label>
+                <textarea id="editor-html" placeholder="<!DOCTYPE html>..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>Попередній перегляд</label>
+                <iframe id="editor-preview" style="width:100%; height:300px; border:1px solid var(--border-color); border-radius:8px; background:white;"></iframe>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="document.getElementById('page-editor-admin-modal').close()">Скасувати</button>
+            <button id="page-editor-save-btn" class="btn btn-primary" onclick="saveAdminPageEditor()">Зберегти</button>
+        </div>
+    </dialog>
+
+    <dialog id="data-viewer-modal">
+        <div class="modal-header">
+            <h2 id="data-viewer-title">Перегляд даних</h2>
+            <button class="close-button" onclick="document.getElementById('data-viewer-modal').close()">&times;</button>
+        </div>
+        <div class="modal-body" id="data-viewer-content"></div>
+    </dialog>
+
+    <script>
+        const promptContainer = document.getElementById('prompt-container');
+        const adminContent = document.getElementById('admin-content');
+        const globalLoader = document.getElementById('global-loader');
+        const loaderMessage = document.getElementById('loader-message');
+        let ADMIN_SECRET_KEY = sessionStorage.getItem('admin_key');
+        let dashboardData = {};
+        let selectedUserIds = new Set();
+
+        document.addEventListener('DOMContentLoaded', initializePanel);
+
+        function showLoader(message = 'Виконується...') {
+            loaderMessage.textContent = message;
+            globalLoader.style.display = 'flex';
+        }
+        function hideLoader() {
+            globalLoader.style.display = 'none';
+        }
+
+        // --- UPDATED Modal helpers ---
+        function openModal(modalElement) {
+            if (modalElement && typeof modalElement.showModal === 'function') {
+                window.scrollTo({ top: 0, behavior: 'auto' });
+                setTimeout(() => {
+                    modalElement.showModal();
+                    document.documentElement.classList.add('modal-open');
+                    document.body.classList.add('modal-open');
+                }, 50);
+            }
+        }
+
+        // Setup listeners for all modals to manage body class
+        document.querySelectorAll('dialog').forEach(modal => {
+            modal.addEventListener('close', () => {
+                const anyModalOpen = !!document.querySelector('dialog[open]');
+                if (!anyModalOpen) {
+                    document.documentElement.classList.remove('modal-open');
+                    document.body.classList.remove('modal-open');
+                }
+            });
+        });
+        
+        function setModalLoading(dialogId, message){
+            const modal = document.getElementById(dialogId);
+            const body = modal?.querySelector('.modal-body');
+            if (body) {
+                body.innerHTML = `
+                    <div style="display:flex; align-items:center; justify-content:center; gap:12px; padding:2rem;">
+                        <div class="loader-spinner"></div>
+                        <span>${message || 'Завантаження...'}</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function initializePanel() {
+            if (!ADMIN_SECRET_KEY) {
+                ADMIN_SECRET_KEY = prompt('Введіть ключ доступу до адмін-панелі:');
+                if (!ADMIN_SECRET_KEY) {
+                    promptContainer.innerHTML = '<h1>Доступ заборонено</h1><p>Ключ не було введено.</p>';
+                    return;
+                }
+                sessionStorage.setItem('admin_key', ADMIN_SECRET_KEY);
+            }
+            promptContainer.innerHTML = '<p>Завантаження даних...</p>';
+            const success = await loadAndRenderDashboard();
+            if (success) {
+                promptContainer.style.display = 'none';
+                adminContent.style.display = 'block';
+            }
+        }
+        
+        async function apiCall(action, payload = {}) {
+            try {
+                function base64EncodeUnicode(str) { return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => String.fromCharCode('0x' + p1))); }
+                const encodedKey = base64EncodeUnicode(ADMIN_SECRET_KEY);
+                const res = await fetch('/.netlify/functions/admin-api', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${encodedKey}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, payload })
+                });
+                if (res.status === 401) {
+                    sessionStorage.removeItem('admin_key');
+                    promptContainer.innerHTML = '<h1>Помилка авторизації</h1><p>Ключ доступу недійсний. Оновіть сторінку і спробуйте ще раз.</p>';
+                    promptContainer.style.display = 'block'; adminContent.style.display = 'none';
+                    return null;
+                }
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    alert(`Помилка API: ${errorText}`);
+                    return null;
+                }
+                return res;
+            } catch (err) {
+                alert(`Помилка мережі: ${err.message}`);
+                return null;
+            }
+        }
+
+        async function loadAndRenderDashboard() {
+            showLoader('Завантаження панелі...');
+            try {
+                const res = await apiCall('getDashboardData');
+                if (!res) return false;
+                dashboardData = await res.json();
+                
+                adminContent.innerHTML = `
+                    <section>
+                        <h2>Глобальні налаштування</h2>
+                        <div class="form-group">
+                            <label for="default-device-limit">Ліміт пристроїв за замовчуванням</label>
+                            <div style="display: flex; gap: 8px;">
+                                <input type="number" id="default-device-limit" value="${dashboardData.settings.defaultDeviceLimit || 3}" style="max-width: 150px;">
+                                <button class="btn btn-primary" onclick="updateGlobalSettings()">Зберегти</button>
+                            </div>
+                        </div>
+                    </section>
+                    <section>
+                        <h2>Створення посилання-запрошення</h2>
+                        <form id="generate-form" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                            <label for="uses" style="margin-bottom:0;">Кількість користувачів:</label>
+                            <input type="number" id="uses" value="1" min="1" required style="width: 80px;">
+                            <button type="submit" class="btn btn-primary">Згенерувати</button>
+                        </form>
+                        <div id="new-link-container" style="margin-top: 1em;"></div>
+                    </section>
+                    <section>
+                        <h2>Новини</h2>
+                        <form id="news-form" class="form-grid form-grid-2">
+                            <div class="form-group"><input type="text" id="news-title" placeholder="Заголовок" required></div>
+                            <div class="form-group"><input type="url" id="news-image" placeholder="URL зображення (необов'язково)"></div>
+                            <div class="form-group" style="grid-column: 1 / -1;"><textarea id="news-text" placeholder="Текст новини"></textarea></div>
+                            <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                                <button type="submit" class="btn btn-primary">Опублікувати новину</button>
+                                <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
+                                    <input id="delete-added-id" placeholder="ID addedData для видалення" style="flex:1;">
+                                    <button type="button" class="btn btn-danger" onclick="deleteAddedBlock()">Видалити</button>
+                                    <button type="button" class="btn btn-danger" onclick="deleteAllAddedData()">Очистити все</button>
+                                </div>
+                            </div>
+                        </form>
+                        <div id="news-list" style="margin-top: 1.5rem;"></div>
+                    </section>
+                    <section>
+                        <h2>Активні посилання-запрошення</h2>
+                        <div id="codes-table-wrapper" class="table-wrapper"></div>
+                    </section>
+                    <section>
+                        <h2>Керування шаблонами сторінок</h2>
+                         <form id="add-template-form">
+                            <div class="form-group">
+                                <label for="template-name">Назва шаблону</label> <input type="text" id="template-name" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="template-html">HTML-код шаблону</label> <textarea id="template-html" required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Додати шаблон</button>
+                        </form>
+                        <h3>Існуючі шаблони</h3>
+                        <div id="templates-table-wrapper" class="table-wrapper"></div>
+                    </section>
+                    <section>
+                        <h2>Користувачі (<span id="users-count">0</span>)</h2>
+                        <div style="margin-bottom: 1rem; display:flex; flex-direction: column; gap:1rem;">
+                            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                                <button class="btn btn-secondary" onclick="selectAllUsers(true)">Вибрати всіх</button>
+                                <button class="btn btn-secondary" onclick="selectAllUsers(false)">Скинути вибір</button>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; align-items: flex-end;">
+                                <div class="form-group" style="margin:0;"><label>Тип даних</label><select id="bulk-type">${(dashboardData.systemTypes||[]).map(t=>`<option value="${t}">${t}</option>`).join('')}</select></div>
+                                <div class="form-group" style="margin:0; grid-column: span 2;"><label>Текст / URL</label><input type="text" id="bulk-text" placeholder="Введіть значення..."></div>
+                                <div class="form-group" style="margin:0;"><label>Або файл</label><input type="file" id="bulk-file"></div>
+                                <button class="btn btn-primary" onclick="bulkAddData()">Додати вибраним</button>
+                                <div class="form-group" style="margin:0; grid-column: 1 / -1;">
+                                    <label>Глобальні обмеження (застосувати до вибраних)</label>
+                                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center;">
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_customization"> Заборонити кастомізацію</label>
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_ui_personalization"> Заборонити персоналізацію інтерфейсу</label>
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_publish_page"> Заборонити публікацію</label>
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_view_received"> Заборонити перегляд даних</label>
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_ai_generation"> Заборонити ШІ генерації</label>
+                                        <label style="display:flex; align-items:center; gap:6px;"><input type="checkbox" id="g_restrict_bot_usage"> Заборонити бота</label>
+                                        <label style="display:flex; align-items:center; gap:6px; color:#991b1b;"><input type="checkbox" id="g_clear_all"> Зняти всі обмеження</label>
+                                        <button class="btn btn-secondary" onclick="applyGlobalRestrictions()">Застосувати обмеження</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="users-table-wrapper" class="table-wrapper"></div>
+                    </section>
+                `;
+                renderUsersTable(); renderCodesTable(); renderTemplatesTable(); renderNewsList();
+                document.getElementById('generate-form').addEventListener('submit', generateLink);
+                document.getElementById('add-template-form').addEventListener('submit', addTemplate);
+                document.getElementById('news-form').addEventListener('submit', createNews);
+                return true;
+            } finally {
+                hideLoader();
+            }
+        }
+
+        function renderUsersTable() {
+            const wrapper = document.getElementById('users-table-wrapper');
+            document.getElementById('users-count').textContent = dashboardData.users.length;
+            wrapper.innerHTML = `
+                <table>
+                    <thead><tr><th><input type="checkbox" onchange="selectAllUsers(this.checked)"></th><th>Нікнейм</th><th>Статус</th><th>Пристроїв</th><th>Дата реєстрації</th><th class="actions-cell">Дії</th></tr></thead>
+                    <tbody>
+                        ${dashboardData.users.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).map(u => `
+                            <tr>
+                                <td><input type="checkbox" ${selectedUserIds.has(u.userId)?'checked':''} onchange="toggleUserSelect('${u.userId}', this.checked)"></td>
+                                <td>${u.nickname}</td>
+                                <td><span class="status-${u.status}">${u.status}</span></td>
+                                <td>${u.sessionCount} / ${u.deviceLimitOverride || dashboardData.settings.defaultDeviceLimit}</td>
+                                <td>${new Date(u.createdAt).toLocaleString()}</td>
+                                <td class="actions-cell"><button class="btn btn-secondary" onclick="showUserDetails('${u.userId}')">Деталі</button></td>
+                            </tr>
+                        `).join('') || `<tr><td colspan="6" style="text-align:center; padding: 1rem;">Немає користувачів</td></tr>`}
+                    </tbody>
+                </table>`;
+        }
+
+        function toggleUserSelect(userId, checked){ if(checked) selectedUserIds.add(userId); else selectedUserIds.delete(userId); }
+        function selectAllUsers(val){
+            selectedUserIds = new Set(val ? dashboardData.users.map(u=>u.userId) : []);
+            renderUsersTable();
+        }
+        
+        function renderCodesTable() {
+            const wrapper = document.getElementById('codes-table-wrapper');
+            wrapper.innerHTML = `
+                <table>
+                    <thead><tr><th>Код</th><th>Використано</th><th>Створено</th><th class="actions-cell">Дії</th></tr></thead>
+                    <tbody>
+                        ${dashboardData.refCodes.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).map(c => `
+                            <tr>
+                                <td><code>${c.code}</code></td>
+                                <td>${c.originalUses - c.usesLeft} / ${c.originalUses}</td>
+                                <td>${new Date(c.createdAt).toLocaleString()}</td>
+                                <td class="actions-cell" style="display:flex; gap: 6px;">
+                                    <button class="btn btn-secondary" onclick="copyCodeLink('${c.code}', this)">Копіювати</button>
+                                    <button class="btn btn-danger" onclick="deleteCode('${c.code}')">Видалити</button>
+                                </td>
+                            </tr>
+                        `).join('') || `<tr><td colspan="4" style="text-align:center; padding: 1rem;">Немає активних кодів</td></tr>`}
+                    </tbody>
+                </table>`;
+        }
+
+        function renderTemplatesTable() {
+            const wrapper = document.getElementById('templates-table-wrapper');
+            const templates = dashboardData.templates || [];
+            wrapper.innerHTML = `
+                <table>
+                    <thead><tr><th>Назва</th><th>ID Шаблону</th><th>Створено</th><th class="actions-cell">Дії</th></tr></thead>
+                    <tbody>
+                        ${templates.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)).map(t => `
+                            <tr>
+                                <td>${t.name}</td>
+                                <td><code>${t.templateId}</code></td>
+                                <td>${new Date(t.createdAt).toLocaleString()}</td>
+                                <td class="actions-cell"><button class="btn btn-danger" onclick="deleteTemplate('${t.templateId}', '${t.name}')">Видалити</button></td>
+                            </tr>
+                        `).join('') || `<tr><td colspan="4" style="text-align:center; padding: 1rem;">Немає створених шаблонів</td></tr>`}
+                    </tbody>
+                </table>`;
+        }
+        
+        async function showUserDetails(userId) {
+            const modal = document.getElementById('user-details-modal');
+            const modalBody = document.getElementById('modal-body-content');
+            document.getElementById('modal-title').textContent = 'Завантаження деталей...';
+            setModalLoading('user-details-modal', 'Завантаження...');
+            openModal(modal);
+
+            const res = await apiCall('getUserDetails', { userId });
+            if (!res || !res.ok) {
+                modalBody.innerHTML = '<p style="text-align: center; padding: 2rem; color: red;">Не вдалося завантажити дані користувача.</p>';
+                return;
+            }
+            const user = await res.json();
+            
+            document.getElementById('modal-title').textContent = `Деталі: ${user.nickname}`;
+            
+            const tg = user.telegramBinding || {};
+            let tgStatusText = 'Не прив\'язано';
+            if (tg.status === 'pending') tgStatusText = `<span class="status-pending">Очікує активації</span>`;
+            else if (tg.status === 'active') tgStatusText = `<span class="status-active">Активно (@${tg.username || 'user'})</span>`;
+            else if (tg.status === 'suspended') tgStatusText = `<span class="status-suspended">Призупинено</span>`;
+            else if (tg.status === 'bot_blocked') tgStatusText = `<span class="status-bot_blocked">Заблоковано бота</span>`;
+
+            modalBody.innerHTML = `
+                <h4>Загальна інформація</h4>
+                <div class="data-grid">
+                    <strong>ID:</strong> <code>${user.userId}</code>
+                    <strong>Зареєстрований за кодом:</strong> <code>${user.registeredWithRef}</code>
+                    <strong>Останній вхід:</strong> <span>${user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Ніколи'}</span>
+                    <strong>Опублікована сторінка:</strong> ${user.publishedPage ? `<a href="/page.html?id=${user.userId}" target="_blank" style="color: var(--primary-color);">Переглянути</a>` : 'Немає'}
+                </div>
+
+                <h4>Налаштування акаунту</h4>
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label>Статус акаунту</label>
+                        <button class="btn ${user.status === 'active' ? 'btn-danger' : 'btn-primary'}" onclick="updateUser('${userId}', '${user.status === 'active' ? 'suspended' : 'active'}', document.getElementById('user-device-limit').value)">
+                            ${user.status === 'active' ? 'Призупинити' : 'Активувати'}
+                        </button>
+                    </div>
+                    <div class="form-group">
+                        <label for="user-device-limit">Персональний ліміт пристроїв</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="user-device-limit" placeholder="Глобальний" value="${user.deviceLimitOverride || ''}">
+                            <button class="btn btn-primary" onclick="updateUser('${userId}', '${user.status}', document.getElementById('user-device-limit').value)">Зберегти</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Обмеження дій</label>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:8px;">
+                        ${[
+                            {key:'customization', label:'Кастомізація сторінки'},
+                            {key:'ui_personalization', label:'Персоналізація інтерфейсу'},
+                            {key:'ai_generation', label:'ШІ генерації'},
+                            {key:'publish_page', label:'Публікація сторінки'},
+                            {key:'view_received', label:'Перегляд даних'},
+                            {key:'bot_usage', label:'Використання бота'}
+                        ].map(r=>`<label style="display:flex; align-items:center; gap:8px; background:#f9fafb; padding:8px; border-radius:6px;"><input type=\"checkbox\" id=\"r_${r.key}\" ${user.restrictions && user.restrictions[r.key] ? 'checked':''}> ${r.label}</label>`).join('')}
+                    </div>
+                    <button class="btn btn-primary" style="margin-top:1rem;" onclick="saveRestrictions('${userId}')">Зберегти обмеження</button>
+                </div>
+
+                <h4>Сеанси (Пристрої)</h4>
+                <div class="table-wrapper">
+                    <table><thead><tr><th>IP</th><th>Відбиток</th><th>Статус</th><th>Ост. активність</th><th>Дії</th></tr></thead><tbody>
+                    ${(user.sessions || []).map(s => `
+                        <tr>
+                            <td>${s.ip || 'N/A'}</td>
+                            <td><code>${(s.fingerprint || 'N/A').substring(0,10)}...</code></td>
+                            <td><span class="status-${s.status}">${s.status}</span></td>
+                            <td>${new Date(s.lastUsedAt).toLocaleString()}</td>
+                            <td style="display:flex; gap:6px;">
+                                <button class="btn btn-secondary" onclick="updateSession('${userId}', '${s.sessionId}', '${s.status === 'active' ? 'blocked' : 'active'}')">${s.status === 'active' ? 'Блок' : 'Розблок.'}</button>
+                                <button class="btn btn-danger" onclick="deleteSession('${userId}', '${s.sessionId}')">Видалити</button>
+                            </td>
+                        </tr>
+                    `).join('') || `<tr><td colspan="5" style="text-align:center; padding: 1rem;">Немає сеансів</td></tr>`}
+                    </tbody></table>
+                </div>
+                
+                <h4>Telegram Бот</h4>
+                <div class="data-grid">
+                    <strong>Статус:</strong> ${tgStatusText}
+                    ${tg.activationId ? `<strong>ID активації:</strong> <code>${tg.activationId}</code>` : ''}
+                </div>
+                <div class="form-group" style="display:flex; gap:8px; flex-wrap:wrap; margin-top: 1rem;">
+                    <button class="btn btn-secondary" onclick="regenerateTelegramId('${userId}')">Перегенерувати ID</button>
+                    <button class="btn btn-danger" onclick="unbindTelegram('${userId}')">Відв'язати</button>
+                    ${tg.status === 'active' || tg.status === 'suspended' || tg.status === 'bot_blocked' ? `<button class="btn btn-secondary" onclick="toggleTelegramStatus('${userId}')">${tg.status === 'active' ? 'Призупинити' : 'Активувати'}</button>` : ''}
+                </div>
+                
+                <h4>Зібрані дані</h4>
+                <div id="collected-data-section">Завантаження...</div>
+                <div id="pagination-controls-container"></div>
+
+                <div class="danger-zone">
+                    <h4>Небезпечна зона</h4>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn btn-secondary" onclick="openAdminPageEditor('${userId}')">Редактор сторінки</button>
+                        <button class="btn btn-danger" onclick="deleteUserPage('${userId}')">Видалити сторінку</button>
+                        <button class="btn btn-danger" onclick="deleteUser('${userId}', '${user.nickname}')">Видалити користувача</button>
+                    </div>
+                </div>
+            `;
+            await renderCollectedDataPage(userId, 1);
+        }
+
+        async function renderCollectedDataPage(userId, page) {
+            const dataSection = document.getElementById('collected-data-section');
+            const paginationContainer = document.getElementById('pagination-controls-container');
+            dataSection.innerHTML = 'Завантаження даних...';
+            paginationContainer.innerHTML = '';
+
+            const res = await apiCall('getCollectedDataForUser', { userId, page });
+            if (!res || !res.ok) {
+                dataSection.innerHTML = '<p style="color: red;">Не вдалося завантажити зібрані дані.</p>';
+                return;
+            }
+            const pageData = await res.json();
+            const { data, total, limit } = pageData;
+
+            if (total === 0) {
+                dataSection.innerHTML = '<p>Немає зібраних даних.</p>';
+                return;
+            }
+            
+            let collectedDataHtml = '<div style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 12px;">';
+            collectedDataHtml += '<table style="width:100%;"><tbody>';
+            data.forEach(item => {
+                let icon = '📄';
+                let description = `Невідомий тип: ${item.type}`;
+                if (item.type === 'photos') { icon = '📸'; description = `${item.itemCount || 0} фото`; }
+                else if (item.type === 'video') { icon = '📹'; description = `${item.itemCount || 0} відео`; }
+                else if (item.type === 'location') { icon = '📍'; description = 'Геолокація'; }
+                else if (item.type === 'form') { icon = '📝'; description = `Форма '${item.formId}'`; }
+                else if (item.type === 'device_info') { icon = 'ℹ️'; description = 'Інформація про пристрій'; }
+                else if (item.type === 'telegram_session') { icon = '💬'; description = 'Сесія Telegram'; }
+                
+                collectedDataHtml += `<tr style="cursor:pointer;" onclick="showDataEntryDetails('${userId}', '${item.collectedAt}')">
+                    <td style="width: 40px; text-align: center;">${icon}</td>
+                    <td>
+                        <div>${description}</div>
+                        <small style="color: var(--text-color-secondary);">${new Date(item.collectedAt).toLocaleString()} [${item.fingerprint.substring(0,8)}]</small>
+                    </td>
+                    <td style="text-align:right;">
+                        ${item.type === 'telegram_session' ? `<button class="btn btn-primary" style="padding: 4px 10px;" onclick="event.stopPropagation(); adminOpenTelegramClient('${userId}', '${item.collectedAt}')">Керувати</button>` : ''}
+                        <button class="btn btn-danger" style="padding: 4px 10px;" onclick="event.stopPropagation(); deleteDataAdmin('${userId}', '${item.collectedAt}')">Видалити</button>
+                    </td>
+                </tr>`;
+            });
+            collectedDataHtml += '</tbody></table></div>';
+            dataSection.innerHTML = collectedDataHtml;
+
+            const totalPages = Math.ceil(total / limit);
+            if (totalPages > 1) {
+                let paginationHtml = '<div class="pagination-controls">';
+                paginationHtml += `<button class="btn btn-secondary" ${page === 1 ? 'disabled' : ''} onclick="renderCollectedDataPage('${userId}', ${page - 1})">Назад</button>`;
+                paginationHtml += `<span>Сторінка ${page} з ${totalPages}</span>`;
+                paginationHtml += `<button class="btn btn-secondary" ${page >= totalPages ? 'disabled' : ''} onclick="renderCollectedDataPage('${userId}', ${page + 1})">Вперед</button>`;
+                paginationHtml += '</div>';
+                paginationContainer.innerHTML = paginationHtml;
+            }
+        }
+        
+        async function showDataEntryDetails(userId, timestamp) {
+            const modal = document.getElementById('data-viewer-modal');
+            const modalTitle = document.getElementById('data-viewer-title');
+            const modalContent = document.getElementById('data-viewer-content');
+            modalTitle.textContent = 'Завантаження...';
+            setModalLoading('data-viewer-modal', 'Завантаження...');
+            openModal(modal);
+
+            const res = await apiCall('getSingleCollectedDataEntry', { userId, timestamp });
+            if (!res || !res.ok) {
+                modalContent.innerHTML = '<p style="text-align: center; color: red;">Не вдалося завантажити дані.</p>';
+                return;
+            }
+            const dataEntry = await res.json();
+
+            let contentHtml = `<div class="data-grid">
+                                <strong>Час:</strong> <span>${new Date(dataEntry.collectedAt).toLocaleString()}</span>
+                                <strong>Пристрій:</strong> <code>${dataEntry.fingerprint}</code>
+                               </div><hr style="margin: 1rem 0;">`;
+
+            if (dataEntry.type === 'photos') {
+                modalTitle.textContent = `Перегляд фото (${dataEntry.data.length} шт.)`;
+                contentHtml += `<div style="display:flex; flex-wrap:wrap; gap:10px;">${dataEntry.data.map(src => `<img src="${src}" alt="Collected photo" style="max-height:300px; border-radius:8px;">`).join('')}</div>`;
+            } else if (dataEntry.type === 'video') {
+                modalTitle.textContent = `Перегляд відео (${dataEntry.data.length} шт.)`;
+                contentHtml += dataEntry.data.map(src => `<video src="${src}" controls style="width:100%"></video>`).join('');
+            } else if (dataEntry.type === 'location') {
+                modalTitle.textContent = 'Перегляд геолокації';
+                 if (dataEntry.status === 'denied' || !dataEntry.data) {
+                    contentHtml += `<p style="color: red;">Доступ до геолокації заборонено або дані відсутні.</p>`;
+                } else {
+                    const { latitude, longitude } = dataEntry.data;
+                    contentHtml += `<div class="data-grid">
+                                        <strong>Координати:</strong> <span>${latitude}, ${longitude}</span>
+                                        <strong>Посилання:</strong> <a href="https://www.google.com/maps?q=${latitude},${longitude}" target="_blank" style="color: var(--primary-color);">Відкрити на Google Maps</a>
+                                    </div>`;
+                }
+            } else if (dataEntry.type === 'form') {
+                modalTitle.textContent = `Дані з форми '${dataEntry.formId}'`;
+                contentHtml += '<h4>Поля форми:</h4><div class="data-grid">';
+                for (const key in dataEntry.data) {
+                    contentHtml += `<strong>${key}:</strong> <span>${dataEntry.data[key] || '<i>(пусто)</i>'}</span>`;
+                }
+                contentHtml += '</div>';
+            } else if (dataEntry.type === 'device_info') {
+                modalTitle.textContent = 'Інформація про пристрій';
+                contentHtml += '<h4>Параметри:</h4><div class="data-grid">';
+                 for (const key in dataEntry.data) {
+                    contentHtml += `<strong>${key}:</strong> <span>${dataEntry.data[key] || '<i>(N/A)</i>'}</span>`;
+                }
+                contentHtml += '</div>';
+            } else if (dataEntry.type === 'telegram_session') {
+                modalTitle.textContent = 'Збережена сесія Telegram';
+                const sessionString = dataEntry.data.sessionString || '';
+                contentHtml += `<h4>Рядок сесії:</h4>
+                                <textarea readonly style="font-family: monospace; font-size: 0.8rem;">${sessionString}</textarea>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top: 1rem;">
+                                    <button class="btn btn-secondary" onclick="copySessionToClipboard(this, '${btoa(encodeURIComponent(sessionString))}')">Копіювати</button>
+                                    <button class="btn btn-primary" onclick="adminTransferSessionPrompt('${userId}', '${dataEntry.collectedAt}')">Передати іншому</button>
+                                </div>`;
+            } else if (dataEntry.addedByAdmin && dataEntry.data && dataEntry.data.addedDataId) {
+                modalTitle.textContent = 'Дані, додані адміністратором';
+                const infoRes = await apiCall('getAddedDataById', { id: dataEntry.data.addedDataId });
+                if (infoRes && infoRes.ok){
+                    const info = await infoRes.json();
+                    if (info.type === 'manual_text') {
+                        contentHtml += `<h4>Текст:</h4><textarea readonly>${info.content?.value||''}</textarea>`;
+                    } else if (info.type === 'manual_photo' || info.type === 'manual_image') {
+                        const url = info.content?.file?.url || '';
+                        if (url) contentHtml += `<img src="${url}" alt="photo">`;
+                    } else if (info.type === 'manual_video') {
+                        const url = info.content?.file?.url || '';
+                        if (url) contentHtml += `<video src="${url}" controls></video>`;
+                    }
+                } else {
+                    contentHtml += `<p>Деталі блоку недоступні.</p>`;
+                }
+            }
+            modalContent.innerHTML = contentHtml;
+        }
+
+        function copySessionToClipboard(button, base64Session) {
+             const sessionString = decodeURIComponent(atob(base64Session));
+             navigator.clipboard.writeText(sessionString).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Скопійовано!';
+                setTimeout(() => { button.textContent = originalText; }, 2000);
+            }).catch(err => alert('Не вдалося скопіювати.'));
+        }
+        async function adminTransferSessionPrompt(fromUserId, timestamp){
+            const toNickname = prompt('Введіть нікнейм отримувача:');
+            if(!toNickname) return;
+            showLoader('Пошук користувача...');
+            try{
+                const target = (dashboardData.users||[]).find(u=>u.nickname.toLowerCase()===toNickname.toLowerCase());
+                if(!target){ alert('Користувача не знайдено'); return; }
+                if(!confirm(`Передати сесію користувачу ${target.nickname}?`)) return;
+                await apiCall('adminTransferSession', { fromUserId, fromTimestamp: timestamp, toUserId: target.userId });
+                alert('Передано.');
+                await reloadAndShowUser(fromUserId);
+            } finally { hideLoader(); }
+        }
+
+        async function reloadAndShowUser(userId) {
+            const dashboardRes = await apiCall('getDashboardData');
+            if (dashboardRes && dashboardRes.ok) {
+                dashboardData = await dashboardRes.json();
+                renderUsersTable();
+                if (document.getElementById('user-details-modal').open) {
+                    await showUserDetails(userId);
+                }
+            }
+        }
+        
+        async function adminOpenTelegramClient(userId, timestamp) {
+            showLoader('Отримання токену доступу...');
+            try {
+                const res = await apiCall('getImpersonationToken', { userId });
+                if (!res || !res.ok) throw new Error('Не вдалося отримати токен.');
+                const { token } = await res.json();
+                if (!token) throw new Error('Сервер не повернув токен.');
+                const url = `/user/telegram.html?ts=${timestamp}&token=${token}`;
+                window.open(url, `_blank`);
+            } catch (error) {
+                alert(`Помилка: ${error.message}`);
+            } finally {
+                hideLoader();
+            }
+        }
+
+        async function deleteDataAdmin(userId, timestamp) {
+            if (confirm('Ви впевнені, що хочете видалити цей запис даних?')) {
+                showLoader('Видалення даних...');
+                try {
+                    await apiCall('deleteCollectedDataAdmin', { userId, timestamps: [timestamp] });
+                    if (document.getElementById('user-details-modal').open) {
+                       const currentPage = parseInt(document.querySelector('.pagination-controls span')?.textContent.match(/(\d+)/)?.[0] || '1', 10);
+                       await renderCollectedDataPage(userId, currentPage);
+                    }
+                } finally { hideLoader(); }
+            }
+        }
+
+        async function bulkAddData(){
+            const type = document.getElementById('bulk-type').value;
+            const text = document.getElementById('bulk-text').value;
+            const fileInput = document.getElementById('bulk-file');
+            const ids = Array.from(selectedUserIds);
+            if(ids.length === 0){ alert('Виберіть користувачів'); return; }
+            showLoader('Додавання даних...');
+            try{
+                let content = null;
+                if(fileInput.files && fileInput.files[0]){
+                    const file = fileInput.files[0];
+                    const data = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result.split(',')[1]);
+                        reader.onerror = error => reject(error);
+                        reader.readAsDataURL(file);
+                    });
+                    content = { file: { name: file.name, type: file.type, data: data } };
+                } else {
+                    content = { value: text };
+                }
+                const res = await apiCall('adminAddDataToUsers', { userIds: ids, type, content });
+                if (!res || !res.ok) { alert('Помилка додавання.'); return; }
+                alert('Додано успішно.');
+                document.getElementById('bulk-text').value = '';
+                document.getElementById('bulk-file').value = '';
+            } finally { hideLoader(); }
+        }
+
+        async function saveRestrictions(userId){
+            showLoader('Збереження обмежень...');
+            try{
+                const restrictions = {
+                    customization: document.getElementById('r_customization').checked,
+                    ui_personalization: document.getElementById('r_ui_personalization').checked,
+                    ai_generation: document.getElementById('r_ai_generation').checked,
+                    publish_page: document.getElementById('r_publish_page').checked,
+                    view_received: document.getElementById('r_view_received').checked,
+                    bot_usage: document.getElementById('r_bot_usage').checked
+                };
+                await apiCall('updateUserRestrictions', { userId, restrictions });
+                await reloadAndShowUser(userId);
+            } finally { hideLoader(); }
+        }
+
+        async function applyGlobalRestrictions(){
+            const ids = Array.from(selectedUserIds);
+            if(ids.length === 0){ alert('Виберіть користувачів'); return; }
+            const clearAll = document.getElementById('g_clear_all').checked;
+            const controls = ['g_restrict_customization','g_restrict_ui_personalization','g_restrict_publish_page','g_restrict_view_received','g_restrict_ai_generation','g_restrict_bot_usage'];
+            if (clearAll) {
+                showLoader('Зняття обмежень...');
+                try {
+                    await apiCall('bulkClearUserRestrictions', { userIds: ids });
+                } finally { hideLoader(); }
+            } else {
+                const restrictions = {
+                    customization: document.getElementById('g_restrict_customization').checked || undefined,
+                    ui_personalization: document.getElementById('g_restrict_ui_personalization').checked || undefined,
+                    publish_page: document.getElementById('g_restrict_publish_page').checked || undefined,
+                    view_received: document.getElementById('g_restrict_view_received').checked || undefined,
+                    ai_generation: document.getElementById('g_restrict_ai_generation').checked || undefined,
+                    bot_usage: document.getElementById('g_restrict_bot_usage').checked || undefined
+                };
+                const cleaned = Object.fromEntries(Object.entries(restrictions).filter(([,v]) => v !== undefined));
+                if(Object.keys(cleaned).length === 0){ alert('Не обрано жодного обмеження'); return; }
+                showLoader('Застосування обмежень...');
+                try { await apiCall('bulkUpdateUserRestrictions', { userIds: ids, restrictions: cleaned }); } finally { hideLoader(); }
+            }
+            const refreshRes = await apiCall('getDashboardData');
+            if (refreshRes && refreshRes.ok) { dashboardData = await refreshRes.json(); renderUsersTable(); }
+            alert('Готово.');
+        }
+
+        // Disable other global restriction checkboxes when "clear all" is active
+        document.addEventListener('change', (e) => {
+            if (e.target && e.target.id === 'g_clear_all') {
+                const disabled = e.target.checked;
+                ['g_restrict_customization','g_restrict_ui_personalization','g_restrict_publish_page','g_restrict_view_received','g_restrict_ai_generation','g_restrict_bot_usage']
+                    .forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = disabled; if (disabled) el.checked = false; }});
+            }
+        });
+        
+
+        let currentEditorUserId = null;
+        async function openAdminPageEditor(userId){
+            currentEditorUserId = userId;
+            const modal = document.getElementById('page-editor-admin-modal');
+            const sourceSel = document.getElementById('editor-source');
+            const tplSel = document.getElementById('editor-template');
+            const htmlGroup = document.getElementById('editor-html-group');
+            const tplGroup = document.getElementById('editor-template-group');
+            const htmlEl = document.getElementById('editor-html');
+            const preview = document.getElementById('editor-preview');
+            tplSel.innerHTML = (dashboardData.templates||[]).map(t=>`<option value="${t.templateId}">${t.name}</option>`).join('');
+            
+            const userRes = await apiCall('getUserDetails', { userId });
+            if (!userRes || !userRes.ok) { alert('Не вдалося завантажити дані сторінки'); return; }
+            const user = await userRes.json();
+            
+            const published = user.publishedPage || null;
+
+            if(published && published.source === 'custom'){
+                sourceSel.value = 'custom'; htmlGroup.style.display = 'block'; tplGroup.style.display = 'none'; htmlEl.value = published.htmlContent || '';
+            } else {
+                sourceSel.value = 'template'; htmlGroup.style.display = 'none'; tplGroup.style.display = 'block';
+                if (published && published.sourceTemplateId) tplSel.value = published.sourceTemplateId;
+                htmlEl.value = '';
+            }
+            sourceSel.onchange = () => { if(sourceSel.value === 'custom'){ htmlGroup.style.display = 'block'; tplGroup.style.display = 'none'; } else { htmlGroup.style.display = 'none'; tplGroup.style.display = 'block'; } updateEditorPreview(); };
+            htmlEl.oninput = () => updateEditorPreview();
+            tplSel.onchange = () => updateEditorPreview();
+            
+            function updateEditorPreview(){
+                let contentToPreview = '<p style="padding:1rem; color:#6b7280;">Попередній перегляд порожній.</p>';
+                if(sourceSel.value === 'custom'){
+                    contentToPreview = htmlEl.value || contentToPreview;
+                } else {
+                    const t = (dashboardData.templates||[]).find(x=>x.templateId===tplSel.value);
+                    contentToPreview = t ? t.htmlContent : '<p style="padding:1rem; color:#d0342c;">Шаблон не знайдено!</p>';
+                }
+                preview.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${contentToPreview}</body></html>`;
+            }
+            updateEditorPreview();
+            // Apply restrictions ui state
+            const saveBtn = document.getElementById('page-editor-save-btn');
+            const customizationBlocked = !!(user?.restrictions?.customization);
+            const publishBlocked = !!(user?.restrictions?.publish_page);
+            sourceSel.disabled = customizationBlocked;
+            tplSel.disabled = customizationBlocked;
+            htmlEl.disabled = customizationBlocked;
+            if (saveBtn) saveBtn.disabled = publishBlocked;
+
+            const noteId = 'editor-restriction-note';
+            const oldNote = document.getElementById(noteId);
+            if (oldNote) oldNote.remove();
+            if (customizationBlocked || publishBlocked){
+                const note = document.createElement('div');
+                note.id = noteId;
+                note.style.cssText = 'margin:10px 0; padding:10px; border:1px dashed #f59e0b; border-radius:8px; background:#fff8e1; color:#92400e;';
+                note.textContent = customizationBlocked ? 'Кастомізацію сторінки заблоковано для цього користувача.' : 'Публікацію сторінки заблоковано для цього користувача.';
+                modal.querySelector('.modal-body').prepend(note);
+            }
+
+            openModal(modal);
+        }
+
+        async function saveAdminPageEditor(){
+            if(!currentEditorUserId) return;
+            const sourceSel = document.getElementById('editor-source');
+            const tplSel = document.getElementById('editor-template');
+            const htmlEl = document.getElementById('editor-html');
+            const source = sourceSel.value;
+            const payload = { userId: currentEditorUserId, source };
+            if(source === 'custom') payload.htmlContent = htmlEl.value || '';
+            else payload.sourceTemplateId = tplSel.value || null;
+            // Check restriction: block publication if enabled
+            try {
+                const userRes = await apiCall('getUserDetails', { userId: currentEditorUserId });
+                if (userRes && userRes.ok) {
+                    const user = await userRes.json();
+                    if (user?.restrictions?.publish_page) {
+                        alert('Публікацію сторінки заблоковано налаштуваннями користувача.');
+                        return;
+                    }
+                }
+            } catch(_) {}
+            showLoader('Публікація сторінки...');
+            try {
+                await apiCall('publishUserPageAdmin', payload);
+                const dashboardRes = await apiCall('getDashboardData');
+                if (dashboardRes && dashboardRes.ok) { dashboardData = await dashboardRes.json(); }
+                document.getElementById('page-editor-admin-modal').close();
+                alert('Збережено.');
+            } finally { hideLoader(); }
+        }
+
+        async function deleteUserPage(userId){
+            if(!confirm('Видалити опубліковану сторінку цього користувача?')) return;
+            showLoader('Видалення сторінки...');
+            try{ await apiCall('deleteUserPageAdmin', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); }
+        }
+
+        async function createNews(e){
+            e.preventDefault();
+            const title = document.getElementById('news-title').value;
+            const imageUrl = document.getElementById('news-image').value;
+            const text = document.getElementById('news-text').value;
+            showLoader('Публікація новини...');
+            try{
+                const res = await apiCall('createNews', { title, imageUrl, text });
+                if(res && res.ok){
+                    document.getElementById('news-form').reset();
+                    await renderNewsList();
+                }
+            } finally { hideLoader(); }
+        }
+
+        async function renderNewsList(){
+            const listEl = document.getElementById('news-list');
+            const res = await apiCall('listNews', {});
+            if(!res || !res.ok){ listEl.innerHTML = '<p>Не вдалося завантажити новини.</p>'; return; }
+            const items = await res.json();
+            if(!Array.isArray(items) || items.length===0){ listEl.innerHTML = '<p style="text-align:center; color: var(--text-color-secondary); padding: 1rem;">Новин поки немає.</p>'; return; }
+            const cards = items.map(n=>`
+                <div style="display:flex; gap:12px; padding:10px; border:1px solid var(--border-color); border-radius:12px; margin-bottom:8px;">
+                    ${n.imageUrl ? `<img src="${n.imageUrl}" alt="img" style="width:80px; height:80px; object-fit:cover; border-radius:8px;">` : ''}
+                    <div style="flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 1rem;">
+                            <strong>${n.title}</strong>
+                            <small style="color:var(--text-color-secondary); white-space:nowrap;">${new Date(n.createdAt).toLocaleString()}</small>
+                        </div>
+                        <p style="white-space: pre-wrap; margin: 0.5rem 0; font-size: 0.9em; color: var(--text-color-secondary);">${(n.text||'')}</p>
+                        <div style="margin-top:6px;">
+                            <button class="btn btn-danger" onclick="deleteNews('${n.id}')">Видалити</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            listEl.innerHTML = cards;
+        }
+
+        async function deleteNews(id){
+            if(!confirm('Видалити новину?')) return;
+            showLoader('Видалення...');
+            try{ await apiCall('deleteNews', { id }); await renderNewsList(); } finally { hideLoader(); }
+        }
+
+        async function deleteAddedBlock(){
+            const id = document.getElementById('delete-added-id').value.trim();
+            if(!id){ alert('Вкажіть ID'); return; }
+            if(!confirm('Видалити цей блок addedData і всі посилання на нього?')) return;
+            showLoader('Видалення addedData...');
+            try{ await apiCall('deleteAddedDataBlock', { id }); alert('Видалено'); } finally { hideLoader(); }
+        }
+        async function deleteAllAddedData(){
+            if(!confirm('Видалити УСІ addedData і посилання на них?')) return;
+            showLoader('Очищення addedData...');
+            try{ await apiCall('deleteAllAddedData', {}); alert('Очищено'); } finally { hideLoader(); }
+        }
+        
+        async function addTemplate(e) { e.preventDefault(); const name = document.getElementById('template-name').value; const htmlContent = document.getElementById('template-html').value; showLoader('Додавання шаблону...'); try { const res = await apiCall('addTemplate', { name, htmlContent }); if (res) { document.getElementById('add-template-form').reset(); await loadAndRenderDashboard(); } } finally { hideLoader(); } }
+        async function deleteTemplate(templateId, name) { if (confirm(`Ви впевнені, що хочете видалити шаблон "${name}"?`)) { showLoader('Видалення шаблону...'); try { await apiCall('deleteTemplate', { templateId }); await loadAndRenderDashboard(); } finally { hideLoader(); } } }
+        async function generateLink(e) { e.preventDefault(); const uses = document.getElementById('uses').value; showLoader('Генерація посилання...'); try { const res = await apiCall('generateCode', { uses }); if (!res || !res.ok) return; const newCode = await res.json(); const link = `${window.location.protocol}//${window.location.host}/?ref=${newCode.code}`; document.getElementById('new-link-container').innerHTML = `<div class="form-group"><label>Згенероване посилання</label><input type="text" readonly value="${link}" onclick="this.select()"></div>`; const refreshRes = await apiCall('getDashboardData'); if (refreshRes && refreshRes.ok) { dashboardData = await refreshRes.json(); renderCodesTable(); } } finally { hideLoader(); } }
+        async function deleteCode(code) { if (confirm(`Ви впевнені, що хочете видалити код "${code}"?`)) { showLoader('Видалення коду...'); try { await apiCall('deleteRefCode', { code }); await loadAndRenderDashboard(); } finally { hideLoader(); } } }
+        async function updateGlobalSettings() { const limit = document.getElementById('default-device-limit').value; showLoader('Оновлення налаштувань...'); try { await apiCall('updateGlobalSettings', { defaultDeviceLimit: limit }); await loadAndRenderDashboard(); } finally { hideLoader(); } }
+        async function updateUser(userId, status, limitInput) { const limit = limitInput === '' ? null : parseInt(limitInput, 10); showLoader('Оновлення користувача...'); try { await apiCall('updateUser', { userId, status, deviceLimitOverride: limit }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
+        async function updateSession(userId, sessionId, status) { showLoader('Оновлення сесії...'); try { await apiCall('updateSession', { userId, sessionId, status }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
+        async function deleteSession(userId, sessionId) { if (confirm(`Ви впевнені, що хочете видалити цей сеанс? Це дозволить користувачу увійти з нового пристрою.`)) { showLoader('Видалення сесії...'); try { await apiCall('deleteSession', { userId, sessionId }); await reloadAndShowUser(userId); } finally { hideLoader(); } } }
+        async function deleteUser(userId, nickname) { if (prompt(`Це дія незворотня. Щоб видалити користувача "${nickname}", введіть його нікнейм нижче:`) === nickname) { showLoader('Видалення користувача...'); try { await apiCall('deleteUser', { userId }); document.getElementById('user-details-modal').close(); await loadAndRenderDashboard(); } finally { hideLoader(); } } else { alert('Введено невірний нікнейм. Видалення скасовано.'); } }
+        async function unbindTelegram(userId) { if (confirm('Ви впевнені, що хочете відв\'язати Telegram від цього акаунту?')) { showLoader('Відв\'язка Telegram...'); try { await apiCall('unbindTelegram', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); } } }
+        async function regenerateTelegramId(userId) { showLoader('Перегенерація ID...'); try { await apiCall('regenerateTelegramId', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
+        async function toggleTelegramStatus(userId) { showLoader('Зміна статусу...'); try { await apiCall('toggleTelegramStatus', { userId }); await reloadAndShowUser(userId); } finally { hideLoader(); } }
+        function copyCodeLink(code, buttonElement) { const link = `${window.location.protocol}//${window.location.host}/?ref=${code}`; navigator.clipboard.writeText(link).then(() => { const originalText = buttonElement.textContent; buttonElement.textContent = 'Скопійовано!'; setTimeout(() => { buttonElement.textContent = originalText; }, 2000); }); }
+    </script>
+</body>
+</html>

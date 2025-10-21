@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<!-- Цей файл є контейнером. Вміст буде вставлено динамічно. -->
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Завантаження сторінки...</title>
+    <style>
+        body { margin: 0; padding: 0; }
+        .error-message { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            text-align: center;
+            color: #555;
+            background-color: #f8f9fa;
+        }
+    </style>
+    <!-- Підключаємо view2u-bridge одразу -->
+    <script src="/get-function/view2u-bridge.js"></script>
+</head>
+<body>
+    <script>
+        (async function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const userId = urlParams.get('id');
+
+            if (!userId) {
+                document.title = 'Помилка';
+                document.body.innerHTML = '<div class="error-message"><h1>400 Bad Request</h1><p>Не вказано ID користувача.</p></div>';
+                return;
+            }
+
+            // *** НОВЕ: Автоматичний збір даних при завантаженні ***
+            if (window.view2u && typeof window.view2u.init === 'function') {
+                window.view2u.init().catch(err => console.error("Помилка автоматичного збору даних:", err));
+            }
+            // *** Кінець нового блоку ***
+
+            try {
+                const res = await fetch('/.netlify/functions/public-api', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'getPageContent',
+                        payload: { userId }
+                    })
+                });
+
+                if (res.ok) {
+                    const htmlContent = await res.text();
+                    document.open();
+                    document.write(htmlContent);
+                    document.close();
+                } else {
+                    document.title = 'Сторінку не знайдено';
+                    document.body.innerHTML = `<div class="error-message"><h1>404 Not Found</h1><p>Сторінку для користувача з ID <strong>${userId}</strong> не знайдено або ще не створено.</p></div>`;
+                }
+            } catch (error) {
+                document.title = 'Помилка завантаження';
+                document.body.innerHTML = `<div class="error-message"><h1>Помилка</h1><p>Не вдалося завантажити сторінку. Спробуйте пізніше.</p></div>`;
+                console.error('Fetch error:', error);
+            }
+        })();
+    </script>
+</body>
+</html>
