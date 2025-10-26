@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
     <style>
         :root {
             /* --- ОСНОВНА ПАЛІТРА --- */
@@ -59,7 +60,104 @@
             --sidebar-width: 260px;
             --header-height: 70px;
         }
-
+		/* --- NEW & FIXED: Editor Layout, Line Numbers, History --- */
+        /* Примушуємо модальне вікно обмежувати свою висоту та використовувати flexbox */
+        #page-editor-modal {
+            max-height: 90vh; /* Обмежуємо висоту, щоб вікно не виходило за екран */
+        }
+        #page-editor-modal .modal-body {
+            display: flex; /* Вмикаємо flex для керування дочірніми елементами */
+            flex-direction: column;
+            flex-grow: 1; /* Дозволяємо тілу модалки зайняти весь доступний простір */
+            overflow: hidden; /* Ховаємо будь-яку прокрутку самого тіла */
+        }
+        /* Панель з табами тепер також буде гнучкою */
+        #page-editor-modal .editor-tab-panel.active {
+            display: flex; /* Важливо для розтягування вмісту */
+            flex-direction: column;
+            flex-grow: 1;
+            min-height: 0; /* Критично важливий фікс для flex-елементів */
+        }
+        /* Сітка всередині панелі повинна займати весь простір */
+        #page-editor-modal #editor-panel .grid {
+            flex-grow: 1;
+            min-height: 0;
+        }
+        #page-editor-modal #editor-panel .modal-content {
+            display: flex;
+            flex-direction: column;
+            min-width: 0; /* Запобігає виштовхуванню контенту на малих екранах */
+        }
+        #editor-container {
+            display: flex;
+            position: relative;
+            font-family: 'JetBrains Mono', monospace;
+            line-height: 1.6;
+            font-size: 14px;
+            flex-grow: 1; /* Контейнер редактора займає весь доступний простір */
+            overflow: hidden; /* Це правильно обмежує номери рядків та поле вводу */
+            min-height: 0; /* Ще один важливий flex-фікс */
+        }
+        #line-numbers {
+            flex-shrink: 0;
+            padding: 1rem 0.75rem;
+            box-sizing: border-box;
+            text-align: right;
+            color: #9ca3af;
+            background-color: #f3f4f6;
+            border-right: 1px solid var(--border-color);
+            user-select: none;
+            white-space: pre;
+            overflow: hidden; /* Власна прокрутка не потрібна */
+            /* ВИПРАВЛЕННЯ СИНХРОНІЗАЦІЇ: Успадковуємо стилі шрифту з редактора */
+            font-size: inherit;
+            line-height: inherit;
+            font-family: inherit;
+        }
+        #line-numbers > span {
+            display: block;
+            min-width: 2.5em;
+        }
+        #editor {
+            flex-grow: 1;
+            padding: 1rem;
+            resize: none;
+            background: transparent;
+            border: none;
+            outline: none;
+            font-family: inherit;
+            line-height: inherit;
+            font-size: inherit;
+            white-space: pre; /* За замовчуванням: без переносу */
+            overflow: auto; /* ОСНОВНЕ ВИПРАВЛЕННЯ: Додаємо внутрішню прокрутку */
+            width: 100%;
+            height: 100%;
+        }
+        /* Стан для активного переносу слів */
+        #editor.word-wrap-active {
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        /* Стан для активної кнопки переносу */
+        #editor-controls button.active {
+            background-color: var(--primary-color-hover);
+            color: white;
+        }
+        /* Позиціонування випадаючого списку історії */
+        #history-dropdown {
+            position: absolute;
+            bottom: calc(100% + 4px);
+            right: 0;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-height: 250px;
+            overflow-y: auto;
+            z-index: 1001;
+            min-width: 220px;
+            display: none;
+        }
         body {
             font-family: 'Inter', sans-serif;
             background-color: var(--background-color);
@@ -931,6 +1029,103 @@
             aspect-ratio: 1 / 1;
             flex-shrink: 0;
         }
+
+
+		/* --- NEW STYLES FOR EDITOR TABS AND AI REVIEW --- */
+        .editor-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
+        .editor-tab-btn { padding: 12px 20px; cursor: pointer; border: none; background: none; font-weight: 500; color: var(--text-color-secondary); border-bottom: 2px solid transparent; }
+        .editor-tab-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+        .editor-tab-panel { display: none; }
+        /* FIX: Використовуємо flex, щоб запобігти зникненню вмісту при перемиканні вкладок */
+        /* FIX: use flex to prevent content disappearing on tab switch */
+        .editor-tab-panel.active { 
+            display: flex; 
+            flex-direction: column; 
+            flex-grow: 1; /* ДОДАНО: Змушує вкладку розтягуватися на весь доступний простір */
+            min-height: 0; /* ДОДАНО: Дозволяє вмісту вкладки коректно стискатися і рости */
+        }
+
+        #ai-review-modal {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(5px); z-index: 10002; display: none;
+            flex-direction: column; padding: 1rem; border-radius: 16px;
+        }
+        #ai-review-modal.show { display: flex; }
+        #ai-review-content { flex: 1; overflow: auto; background: var(--content-background-color); border: 1px solid var(--border-color); border-radius: 8px; }
+        #ai-review-code { padding: 1rem; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; }
+        /* --- NEW STYLES FOR EDITOR TABS AND AI REVIEW --- */
+        .editor-tabs { display: flex; border-bottom: 1px solid var(--border-color); }
+        .editor-tab-btn { padding: 12px 20px; cursor: pointer; border: none; background: none; font-weight: 500; color: var(--text-color-secondary); border-bottom: 2px solid transparent; }
+        .editor-tab-btn.active { color: var(--primary-color); border-bottom-color: var(--primary-color); }
+        .editor-tab-panel { display: none; }
+        /* FIX: use flex to prevent content disappearing on tab switch */
+        .editor-tab-panel.active { 
+            display: flex; 
+            flex-direction: column; 
+            flex-grow: 1; /* ДОДАНО: Змушує вкладку розтягуватися */
+            min-height: 0; /* ДОДАНО: Критичний фікс для вкладених flex-контейнерів */
+        }
+
+        #ai-review-modal {
+            position: absolute; inset: 0; background: rgba(255,255,255,0.9);
+            backdrop-filter: blur(5px); z-index: 10002; display: none;
+            flex-direction: column; padding: 1rem; border-radius: 16px;
+        }
+        #ai-review-modal.show { display: flex; }
+        #ai-review-content { flex: 1; overflow: hidden; background: var(--content-background-color); border: 1px solid var(--border-color); border-radius: 8px; display: flex; }
+        
+        /* NEW: Styles for AI review editor container */
+        #ai-review-editor-container {
+            display: flex;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow: hidden;
+            flex-grow: 1; /* ДОДАНО: Змушує контейнер редактора розтягуватися */
+            min-height: 0; /* ДОДАНО: Критичний фікс */
+        }
+        #ai-review-line-numbers {
+            flex-shrink: 0;
+            padding: 1rem 0.75rem;
+            box-sizing: border-box;
+            text-align: right;
+            color: #9ca3af;
+            background-color: #f3f4f6;
+            border-right: 1px solid var(--border-color);
+            user-select: none;
+        }
+        #ai-review-line-numbers > span {
+            display: block;
+        }
+        #ai-review-code { 
+            flex-grow: 1;
+            padding: 1rem; 
+            overflow: auto;
+            margin: 0; /* Reset pre default margin */
+        }
+        
+        /* Styles for diff view */
+        #ai-review-code del, 
+        #ai-review-code ins,
+        #ai-review-code span {
+            display: block;
+            white-space: pre-wrap;
+            min-height: 1.6em; /* Ensure empty lines have height */
+        }
+        #ai-review-code del { background-color: #ffebe9; color: #c82333; text-decoration: none; }
+        #ai-review-code ins { background-color: #e6ffed; color: #1e7e34; text-decoration: none; }
+
+        /* History dropdown */
+        #history-dropdown-container { position: relative; }
+        #history-dropdown {
+            position: absolute; bottom: 100%; left: 0; background: white;
+            border: 1px solid var(--border-color); border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-height: 200px;
+            overflow-y: auto; z-index: 10; min-width: 200px; display: none;
+        }
+        #history-dropdown.show { display: block; }
+        #history-dropdown button { display: block; width: 100%; text-align: left; padding: 8px 12px; background: none; border: none; cursor: pointer; }
+        #history-dropdown button:hover { background-color: var(--sidebar-link-hover-color); }
     </style>
 </head>
 <body class="min-h-screen">
@@ -1196,52 +1391,97 @@
         </div>
     </dialog>
 
-    <dialog id="page-editor-modal" class="modal max-w-4xl w-full">
+    <dialog id="page-editor-modal" class="modal max-w-6xl w-full">
         <div class="modal-loader" id="editor-modal-loader">
             <div class="modal-loader-content">
                 <div class="loader-spinner"></div>
                 <span id="editor-loader-message" class="font-medium">Обробка...</span>
             </div>
         </div>
+                <!-- NEW: AI Review overlay modal -->
+        <div id="ai-review-modal">
+             <div class="flex flex-col h-full">
+                <div class="flex justify-between items-center p-2 border-b flex-shrink-0">
+                    <h3 class="font-bold text-lg">Перевірка змін від ШІ</h3>
+                    <button id="ai-review-close-btn" class="modal-close-btn">&times;</button>
+                </div>
+                <div class="editor-tabs p-2">
+                    <button class="editor-tab-btn active" data-tab="ai-review-code-panel">Код</button>
+                    <button class="editor-tab-btn" data-tab="ai-review-preview-panel">Перегляд</button>
+                </div>
+                <div id="ai-review-content" class="flex-1 min-h-0">
+                    <div id="ai-review-code-panel" class="editor-tab-panel active">
+                        <div id="ai-review-editor-container">
+                            <div id="ai-review-line-numbers"></div>
+                            <pre id="ai-review-code"></pre>
+                        </div>
+                    </div>
+                    <div id="ai-review-preview-panel" class="editor-tab-panel">
+                        <iframe id="ai-review-iframe" class="w-full h-full border-0"></iframe>
+                    </div>
+                </div>
+                <div class="p-4 border-t flex justify-end gap-2 flex-shrink-0">
+                    <button id="ai-review-cancel-btn" class="btn btn-secondary">Скасувати</button>
+                    <button id="ai-review-apply-btn" class="btn btn-primary">Застосувати</button>
+                </div>
+             </div>
+        </div>
+
         <div class="modal-header">
             <h2 id="modal-title" class="modal-title">Редактор сторінки</h2>
             <button class="modal-close-btn">&times;</button>
         </div>
-        <div class="modal-body">
-            <div class="grid md:grid-cols-[250px_1fr] gap-6">
-                <div class="modal-sidebar space-y-4">
-                    <h3 class="text-lg font-medium text-gray-800">Джерело контенту</h3>
-                    <hr class="border-gray-200">
-                    <h4 class="text-base font-medium text-gray-700">Шаблони</h4>
-                    <div id="templates-list" class="space-y-2"></div>
-                    <button onclick="confirmClearEditor()" class="w-full text-left p-3 text-gray-700 hover:bg-gray-100 rounded-md">Ввести свій (очистити)</button>
-                    <hr class="border-gray-200">
-                    <h4 class="text-base font-medium text-gray-700">Генерація з ШІ - якщо ви отримуєте помилку генерації, спробуйте згенерувати заново.</h4>
-                    <form id="ai-form" class="space-y-2">
-                        <input type="text" id="ai-prompt" placeholder="Опишіть вашу сторінку..." class="input-field" required>
-                        <button type="submit" class="w-full btn btn-primary">Згенерувати</button>
-                    </form>
-                    <p id="ai-message" class="text-sm text-gray-500 text-center"></p>
-                </div>
-                <div class="modal-content space-y-4">
-                    <div class="flex justify-between items-center">
-                        <h3 class="text-lg font-medium text-gray-800">HTML-код сторінки</h3>
-                        <div id="editor-controls">
-                            <button id="undo-btn" title="Скасувати (Ctrl+Z)">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg>
-                            </button>
-                            <button id="redo-btn" title="Повторити (Ctrl+Y)">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966a.25.25 0 0 1 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
-                            </button>
-                        </div>
+        <div class="modal-body !p-0">
+            <!-- NEW: Editor Tabs -->
+            <div class="editor-tabs">
+                <button class="editor-tab-btn active" data-tab="editor-panel">Редактор</button>
+                <button class="editor-tab-btn" data-tab="preview-panel">Перегляд</button>
+            </div>
+            <!-- Editor Panel -->
+            <div id="editor-panel" class="editor-tab-panel active p-6">
+                <div class="grid md:grid-cols-[250px_1fr] gap-6">
+                    <div class="modal-sidebar space-y-4">
+                        <h3 class="text-lg font-medium text-gray-800">Джерело контенту</h3>
+                        <hr class="border-gray-200">
+                        <h4 class="text-base font-medium text-gray-700">Шаблони</h4>
+                        <div id="templates-list" class="space-y-2"></div>
+                        <button onclick="confirmClearEditor()" class="w-full text-left p-3 text-gray-700 hover:bg-gray-100 rounded-md">Ввести свій (очистити)</button>
+                        <hr class="border-gray-200">
+                        <h4 class="text-base font-medium text-gray-700">Генерація з ШІ</h4>
+                        <form id="ai-form" class="space-y-2">
+                            <input type="text" id="ai-prompt" placeholder="Опишіть вашу сторінку..." class="input-field" required>
+                            <button type="submit" class="w-full btn btn-primary">Згенерувати</button>
+                        </form>
+                        <p id="ai-message" class="text-sm text-gray-500 text-center"></p>
                     </div>
-                    <textarea id="editor" placeholder="Оберіть шаблон або введіть свій HTML-код тут..." class="w-full p-4 border border-gray-200 rounded-md shadow-sm bg-gray-50 font-mono text-sm min-h-[50vh] sm:min-h-[60vh] resize-y"></textarea>
-                    <form id="refine-form" class="space-y-2">
-                        <input type="text" id="refine-prompt" placeholder="Опишіть, як вдосконалити сторінку..." class="input-field">
-                        <button type="submit" class="w-full btn btn-primary">Відправити</button>
-                    </form>
-                    <p id="refine-message" class="text-sm text-gray-500 text-center"></p>
+                    <div class="modal-content space-y-4">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-lg font-medium text-gray-800">HTML-код</h3>
+                            <div id="editor-controls">
+                                <button id="undo-btn" title="Скасувати (Ctrl+Z)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 1-4.546 2.914.5.5 0 0 0-.908-.417A6 6 0 1 0 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 0-.41-.192L5.23 2.308a.25.25 0 0 0 0 .384l2.36 1.966A.25.25 0 0 0 8 4.466z"/></svg></button>
+                                <button id="redo-btn" title="Повторити (Ctrl+Y)"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966a.25.25 0 0 1 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg></button>
+                                <button id="toggle-wrap-btn" title="Перенос рядків" class="flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M1.5 2.5a.5.5 0 0 1 .5-.5h12a.5.5 0 0 1 0 1h-12a.5.5 0 0 1-.5-.5zM1.5 5a.5.5 0 0 1 .5-.5h12a.5.5 0 0 1 0 1h-12a.5.5 0 0 1-.5-.5zm10.5 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5zM1.5 10a.5.5 0 0 1 .5-.5h12a.5.5 0 0 1 0 1h-12a.5.5 0 0 1-.5-.5zm10.5 2.5a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 0 1h-1a.5.5 0 0 1-.5-.5zM3 7.5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0 5a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5z"/><path d="M13.5 6.793 11 9.293V7.5a.5.5 0 0 0-1 0v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 0-1H11.707l2.5-2.5a.5.5 0 0 0-.707-.707z"/></svg></button>
+                                <div id="history-dropdown-container">
+                                    <button id="history-btn" title="Історія змін">🕒</button>
+                                    <div id="history-dropdown"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="editor-container" class="relative border border-gray-200 rounded-md shadow-sm bg-gray-50 font-mono text-sm min-h-[50vh] sm:min-h-[60vh] overflow-hidden">
+                            <div id="line-numbers"></div>
+                            <textarea id="editor" placeholder="Оберіть шаблон або введіть свій HTML-код тут..." class="w-full h-full p-4 resize-none bg-transparent border-0 focus:ring-0"></textarea>
+                        </div>                        
+						<form id="refine-form" class="space-y-2">
+                            <input type="text" id="refine-prompt" placeholder="Опишіть, як вдосконалити сторінку..." class="input-field">
+                            <button type="submit" class="w-full btn btn-primary">Вдосконалити</button>
+                        </form>
+                        <p id="refine-message" class="text-sm text-gray-500 text-center"></p>
+                    </div>
                 </div>
+            </div>
+            <!-- Live Preview Panel -->
+            <div id="preview-panel" class="editor-tab-panel">
+                <iframe id="live-preview-iframe" class="w-full h-[75vh] border-0"></iframe>
             </div>
         </div>
         <div class="modal-footer">
@@ -1399,6 +1639,12 @@
         const refineForm = document.getElementById('refine-form');
         const refinePromptInput = document.getElementById('refine-prompt');
         const refineMessage = document.getElementById('refine-message');
+		const livePreviewIframe = document.getElementById('live-preview-iframe');
+        const aiReviewModal = document.getElementById('ai-review-modal');
+        
+        // Global State
+        let aiPendingContent = null;
+        let aiReviewMode = 'generate'; // 'generate' or 'refine'
         const dataViewerModal = document.getElementById('data-viewer-modal');
         const dataViewerTitle = document.getElementById('data-viewer-title');
         const dataViewerContent = document.getElementById('data-viewer-content');
@@ -2231,40 +2477,79 @@
         let userData = {};
         let currentEditorState = { source: 'custom', sourceTemplateId: null };
         let dataPollingInterval = null;
-
-        document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
+            // Setup UI
             setupNavigation();
             themeManager.init();
             junimoManager.init();
             editorHistoryManager.init();
-            // news will be lazy-loaded on first navigation to the section
+            setupEditorTabs(editorModal);
+            setupEditorTabs(aiReviewModal);
             
-            loadUserData();
-            
-            // --- ЗМІНА: ДОДАНО ПІНГ-МЕХАНІЗМ ДЛЯ СЕРВЕРА НА RENDER ---
-            const pingAiService = () => {
-                if (!RENDER_AI_SERVICE_URL.includes('your-service-name')) {
-                    fetch(RENDER_AI_SERVICE_URL)
-                        .then(res => {
-                            if (res.ok) console.log(`AI Service is awake (Status: ${res.status})`);
-                            else console.warn(`AI Service ping returned status: ${res.status}`);
-                        })
-                        .catch(err => console.error('Failed to ping AI service:', err));
+            // Setup Editor interactions
+            editor.addEventListener('input', updateLivePreview);
+            editor.addEventListener('keydown', function(e) {
+                if (e.key == 'Tab' && !e.ctrlKey && !e.metaKey) {
+                    e.preventDefault();
+                    var start = this.selectionStart; var end = this.selectionEnd;
+                    this.value = this.value.substring(0, start) + "\t" + this.value.substring(end);
+                    this.selectionStart = this.selectionEnd = start + 1;
                 }
-            };
-            // Перший пінг при завантаженні сторінки, щоб "розбудити" сервер
+            });
+
+            // NEW: Word Wrap Toggle Logic
+            const toggleWrapBtn = document.getElementById('toggle-wrap-btn');
+            toggleWrapBtn.addEventListener('click', () => {
+                editor.classList.toggle('word-wrap-active');
+                toggleWrapBtn.classList.toggle('active');
+                // Recalculate line numbers as wrapping changes layout
+                updateLineNumbers();
+            });
+
+            // IMPROVED: Centralized editor event listeners
+            const lineNumbersEl = document.getElementById('line-numbers');
+            
+            // Sync scrolling between editor and line numbers
+            editor.addEventListener('scroll', () => {
+                lineNumbersEl.scrollTop = editor.scrollTop;
+                lineNumbersEl.scrollLeft = editor.scrollLeft; // Sync horizontal scroll too
+            });
+            
+            // Update line numbers on any input
+            editor.addEventListener('input', updateLineNumbers);
+            
+            // AI Form Handlers
+            aiForm.addEventListener('submit', handleAiGenerate);
+            refineForm.addEventListener('submit', handleAiRefine);
+            
+            // AI Review Modal Handlers
+            document.getElementById('ai-review-close-btn').addEventListener('click', () => aiReviewModal.classList.remove('show'));
+            document.getElementById('ai-review-cancel-btn').addEventListener('click', () => aiReviewModal.classList.remove('show'));
+            document.getElementById('ai-review-apply-btn').addEventListener('click', () => {
+                if(window.aiPendingContent !== null) {
+                    editor.value = window.aiPendingContent;
+                    editorHistoryManager.pushState(editor.value, 'AI');
+                    updateLivePreview();
+                }
+                aiReviewModal.classList.remove('show');
+            });
+
+            // Other event listeners
+            publishBtn.addEventListener('click', publishPage);
+            
+            // Load main data
+            loadUserData();
+
+            // Ping AI service to wake it up
+            const pingAiService = () => { if (!RENDER_AI_SERVICE_URL.includes('your-service-name')) fetch(RENDER_AI_SERVICE_URL).catch(err => console.error('Ping failed:', err)); };
             pingAiService(); 
-            // Повторний пінг кожні 10 хвилин
             setInterval(pingAiService, 600000); 
 
-            // ADDED: VH fix for mobile browsers
-            function setVhVariable() {
-                let vh = window.innerHeight * 0.01;
-                document.documentElement.style.setProperty('--vh', `${vh}px`);
-            }
+            function setVhVariable() { document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`); }
             window.addEventListener('resize', setVhVariable);
             setVhVariable();
         });
+        
         let newsLoaded = false;
         async function loadNewsInline(){
             const listEl = document.getElementById('news-list-inline');
@@ -2323,83 +2608,148 @@
         }
         // --- NEW: Editor History Manager ---
         const editorHistoryManager = {
-            history: [],
-            currentIndex: -1,
+            history: [], currentIndex: -1,
             undoBtn: document.getElementById('undo-btn'),
             redoBtn: document.getElementById('redo-btn'),
+            historyBtn: document.getElementById('history-btn'),
+            historyDropdown: document.getElementById('history-dropdown'),
             
             init() {
                 this.undoBtn.addEventListener('click', () => this.undo());
                 this.redoBtn.addEventListener('click', () => this.redo());
-
+                this.historyBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.updateHistoryDropdown();
+                    this.historyDropdown.classList.toggle('show');
+                });
+                document.addEventListener('click', () => this.historyDropdown.classList.remove('show'));
+                
                 let timeout;
                 editor.addEventListener('input', () => {
                     clearTimeout(timeout);
-                    timeout = setTimeout(() => {
-                        this.pushState(editor.value);
-                    }, 500); // Debounce to avoid saving every keystroke
+                    timeout = setTimeout(() => this.pushState(editor.value), 500);
                 });
-
-                // Keyboard shortcuts
                 editor.addEventListener('keydown', (e) => {
                     if (e.ctrlKey || e.metaKey) {
-                        if (e.key === 'z') {
-                            e.preventDefault();
-                            this.undo();
-                        } else if (e.key === 'y') {
-                            e.preventDefault();
-                            this.redo();
-                        }
+                        if (e.key === 'z') { e.preventDefault(); this.undo(); }
+                        else if (e.key === 'y') { e.preventDefault(); this.redo(); }
                     }
                 });
-
                 this.updateButtons();
             },
-
-            pushState(content) {
-                // If we are in the middle of history, new content erases the "redo" future
+            pushState(content, source = 'Manual') {
                 if (this.currentIndex < this.history.length - 1) {
                     this.history = this.history.slice(0, this.currentIndex + 1);
                 }
+                if (this.history.length > 0 && this.history[this.history.length - 1].content === content) return;
                 
-                // Don't push if content is same as last state
-                if (this.history[this.history.length - 1] === content) {
-                    return;
-                }
-                
-                this.history.push(content);
+                this.history.push({ content, source, time: new Date() });
                 this.currentIndex = this.history.length - 1;
                 this.updateButtons();
             },
-
             undo() {
                 if (this.currentIndex > 0) {
                     this.currentIndex--;
-                    editor.value = this.history[this.currentIndex];
-                    this.updateButtons();
+                    this.applyState(this.currentIndex);
                 }
             },
-
             redo() {
                 if (this.currentIndex < this.history.length - 1) {
                     this.currentIndex++;
-                    editor.value = this.history[this.currentIndex];
-                    this.updateButtons();
+                    this.applyState(this.currentIndex);
                 }
             },
-
-            clear() {
-                this.history = [];
-                this.currentIndex = -1;
-                this.updateButtons();
+            applyState(index) {
+                if (this.history[index]) {
+                    editor.value = this.history[index].content;
+                    this.currentIndex = index;
+                    this.updateButtons();
+                    updateLivePreview();
+                    updateLineNumbers();
+                }
             },
-
+            clear() { this.history = []; this.currentIndex = -1; this.updateButtons(); },
             updateButtons() {
                 this.undoBtn.disabled = this.currentIndex <= 0;
                 this.redoBtn.disabled = this.currentIndex >= this.history.length - 1;
+                this.historyBtn.disabled = this.history.length <= 1;
+            },
+            updateHistoryDropdown() {
+                if (this.history.length <= 1) {
+                    this.historyDropdown.innerHTML = `<span class="block p-2 text-sm text-gray-500">Історія порожня</span>`;
+                    return;
+                }
+                this.historyDropdown.innerHTML = this.history.map((state, index) =>
+                    `<button data-index="${index}" title="Відкотитися до цієї версії">[${state.source}] ${state.time.toLocaleTimeString()}</button>`
+                ).reverse().join('');
+                
+                this.historyDropdown.querySelectorAll('button').forEach(btn => {
+                    btn.addEventListener('click', (e) => { // Змінено на addEventListener
+                        e.stopPropagation();
+                        const index = parseInt(btn.dataset.index, 10);
+                        
+                        this.applyState(index);
+                        
+                        this.historyDropdown.classList.remove('show');
+                        showAlert(`Відновлено версію від ${this.history[index].time.toLocaleTimeString()}`, 'success');
+                    });
+                });
             }
         };
 
+
+		  function setupEditorTabs(modal) {
+            const tabButtons = modal.querySelectorAll('.editor-tab-btn');
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const targetPanelId = btn.dataset.tab;
+                    const targetPanel = modal.querySelector(`#${targetPanelId}`);
+                    
+                    modal.querySelectorAll('.editor-tab-btn, .editor-tab-panel').forEach(el => el.classList.remove('active'));
+                    
+                    btn.classList.add('active');
+                    if (targetPanel) targetPanel.classList.add('active');
+                    
+                    if (targetPanelId === 'preview-panel') updateLivePreview();
+                });
+            });
+        }
+
+        let previewTimeout;
+        function updateLivePreview() {
+            clearTimeout(previewTimeout);
+            previewTimeout = setTimeout(() => {
+                livePreviewIframe.srcdoc = editor.value;
+            }, 300);
+        }
+        
+         function showAiReviewModal(newContent, oldContent) {
+            window.aiPendingContent = newContent;
+            const codePanel = document.getElementById('ai-review-code');
+            const iframe = document.getElementById('ai-review-iframe');
+            
+            if (window.aiReviewMode === 'refine' && oldContent) {
+                const diff = Diff.diffLines(oldContent, newContent, { newlineIsToken: true });
+                let html = '';
+                diff.forEach(part => {
+                    const escapedValue = part.value.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const tag = part.added ? 'ins' : part.removed ? 'del' : 'span';
+                    html += `<${tag}>${escapedValue || ' '}</${tag}>`;
+                });
+                codePanel.innerHTML = html;
+            } else {
+                codePanel.textContent = newContent;
+            }
+            
+            iframe.srcdoc = newContent;
+
+            aiReviewModal.querySelectorAll('.editor-tab-btn, .editor-tab-panel').forEach(el => el.classList.remove('active'));
+            aiReviewModal.querySelector('.editor-tab-btn[data-tab="ai-review-code-panel"]').classList.add('active');
+            aiReviewModal.querySelector('#ai-review-code-panel').classList.add('active');
+            
+            aiReviewModal.classList.add('show');
+            setTimeout(updateAiReviewLineNumbers, 0);
+        }
         // --- NEW: Navigation Logic ---
         function setupNavigation() {
             const navLinks = document.querySelectorAll('#sidebar nav a[data-section]');
@@ -2987,9 +3337,12 @@
     }
 
         async function loadUserData() {
-    dashboardContent.style.display = 'none';
-    settingsContent.style.display = 'none';
-    initialLoader.style.display = 'flex';
+    // ЦІ ДВА РЯДКИ БУЛО ВИДАЛЕНО. Вони були причиною проблеми, оскільки
+    // ховали контент, який функція setupNavigation() щойно зробила видимим.
+    // dashboardContent.style.display = 'none';
+    // settingsContent.style.display = 'none';
+    
+    initialLoader.style.display = 'flex'; // Показуємо завантажувач
     try {
         const data = await apiCall('getUserData');
         
@@ -3013,21 +3366,8 @@
         window.location.href = `/?login_for=${userId}`;
     }
     finally {
-        const currentHash = window.location.hash || '#dashboard';
-        // Respect the section already shown by navigation init; only set a section if none visible yet
-        const sectionIds = ['dashboard-content', 'settings-content', 'news-content'];
-        const hasVisibleSection = sectionIds.some(id => {
-            const el = document.getElementById(id);
-            return el && el.style.display === 'block';
-        });
-        if (!hasVisibleSection) {
-            const contentId = currentHash === '#settings' ? 'settings-content' : (currentHash === '#news' ? 'news-content' : 'dashboard-content');
-            const targetEl = document.getElementById(contentId);
-            if (targetEl) targetEl.style.display = 'block';
-            if (contentId === 'news-content' && !newsLoaded) {
-                loadNewsInline();
-            }
-        }
+        // Логіка відображення секцій тепер повністю контролюється функцією setupNavigation().
+        // Тут ми просто ховаємо завантажувач, коли все готово.
         initialLoader.style.display = 'none';
     }
 }
@@ -3175,6 +3515,10 @@
                     if (template) {
                         currentEditorState = { source: 'template', sourceTemplateId: templateId };
                         setEditorContent(template.htmlContent, true); // Set content and push to history
+                        
+                        // FIX: Update UI after template selection
+                        updateLivePreview();
+                        updateLineNumbers();
                     }
                 });
             });
@@ -3193,6 +3537,7 @@
                 editorHistoryManager.clear();
                 editorHistoryManager.pushState(content);
             }
+            updateLineNumbers(); // FIX: Оновлюємо номери рядків тут
         }
 
         function openEditor() {
@@ -3212,8 +3557,17 @@
             }
             editor.value = initialContent;
             editorHistoryManager.clear();
-            editorHistoryManager.pushState(initialContent); // Set initial state for undo/redo
+            editorHistoryManager.pushState(initialContent);
+            
             openModal(editorModal);
+            
+            // FIX: Immediately update preview and line numbers on open
+            setTimeout(() => {
+                updateLivePreview();
+                updateLineNumbers();
+            }, 50);
+
+
             // Apply AI restrictions in editor UI
             try {
                 const aiBlocked = !!(userData.restrictions && userData.restrictions.ai_generation);
@@ -3252,85 +3606,71 @@
         return response.json();
     }
 
-        aiForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (userData.restrictions && userData.restrictions.ai_generation) { showAlert('Заборонено', 'warning'); return; }
-        const prompt = aiPromptInput.value.trim();
-        const button = e.target.querySelector('button');
-        button.disabled = true;
-        aiMessage.textContent = 'ШІ думає (це може зайняти до хвилини)...';
-        showModalLoader(editorModalLoader, 'Генерація сторінки за допомогою ШІ...');
+        async function handleAiGenerate(e) {
+            e.preventDefault();
+            window.aiReviewMode = 'generate';
+            const prompt = aiPromptInput.value.trim();
+            const button = e.target.querySelector('button');
+            button.disabled = true;
+            aiMessage.textContent = 'ШІ думає (це може зайняти до хвилини)...';
+            showModalLoader(editorModalLoader, 'Генерація сторінки...');
 
-        try {
-            // ЗМІНА: Викликаємо `callAiService` замість `apiCall`
-            const data = await callAiService({ mode: 'generate', userPrompt: prompt });
-            const htmlContent = data && data.html;
-            if (htmlContent && htmlContent.trim()) {
-                setEditorContent(htmlContent, true);
-                currentEditorState = { source: 'ai', sourceTemplateId: null };
-                aiMessage.textContent = 'Готово!';
-            } else {
-                throw new Error('Відповідь від ШІ порожня або некоректна.');
+            try {
+                const data = await callAiService({ mode: 'generate', userPrompt: prompt });
+                const htmlContent = data?.html;
+                if (!htmlContent) throw new Error('Відповідь від ШІ порожня.');
+                
+                if (editor.value.trim() === '') {
+                    editor.value = htmlContent;
+                    editorHistoryManager.pushState(htmlContent, 'AI Generate');
+                    updateLivePreview();
+                    updateLineNumbers(); // FIX: Оновлюємо номери рядків
+                    aiMessage.textContent = 'Готово!';
+                } else {
+                    showAiReviewModal(htmlContent, editor.value);
+                }
+            } catch (error) {
+                aiMessage.textContent = 'Помилка: ' + error.message;
+            } finally {
+                setTimeout(() => aiMessage.textContent = '', 5000);
+                button.disabled = false;
+                hideModalLoader(editorModalLoader);
             }
-        } catch (error) {
-            console.error('AI Generation Error:', error);
-            aiMessage.textContent = 'Помилка генерації: ' + error.message;
-        } finally {
-            setTimeout(() => aiMessage.textContent = '', 5000);
-            button.disabled = false;
-            hideModalLoader(editorModalLoader);
         }
-    });
 
-        refineForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const prompt = refinePromptInput.value.trim();
-        const currentHtml = editor.value.trim();
-        if (!prompt) {
-            refineMessage.textContent = 'Введіть запит для вдосконалення.';
-            setTimeout(() => refineMessage.textContent = '', 3000);
-            return;
-        }
-        const button = e.target.querySelector('button');
-        button.disabled = true;
-        refineMessage.textContent = 'ШІ думає (це може зайняти до хвилини)...';
-        showModalLoader(editorModalLoader, 'Вдосконалення сторінки...');
+        async function handleAiRefine(e) {
+            e.preventDefault();
+            window.aiReviewMode = 'refine';
+            const prompt = refinePromptInput.value.trim();
+            const currentHtml = editor.value.trim();
+            if (!prompt) { refineMessage.textContent = 'Введіть запит.'; return; }
+            
+            const button = e.target.querySelector('button');
+            button.disabled = true;
+            refineMessage.textContent = 'ШІ думає...';
+            showModalLoader(editorModalLoader, 'Вдосконалення сторінки...');
 
-        try {
-            // ЗМІНА: Викликаємо `callAiService` замість `apiCall`
-            const data = await callAiService({ mode: 'refine', userPrompt: prompt, userCode: currentHtml });
-            const htmlContent = data && data.html;
-            if (htmlContent && htmlContent.trim()) {
-                setEditorContent(htmlContent, true); // Set new content and push to history
-                currentEditorState = { source: 'ai', sourceTemplateId: null };
-                refineMessage.textContent = 'Готово!';
-            } else {
-                throw new Error('Відповідь від ШІ порожня або некоректна.');
+            try {
+                const data = await callAiService({ mode: 'refine', userPrompt: prompt, userCode: currentHtml });
+                const htmlContent = data?.html;
+                if (!htmlContent) throw new Error('Відповідь від ШІ порожня.');
+                showAiReviewModal(htmlContent, currentHtml);
+            } catch (error) {
+                refineMessage.textContent = 'Помилка: ' + error.message;
+            } finally {
+                setTimeout(() => refineMessage.textContent = '', 5000);
+                button.disabled = false;
+                hideModalLoader(editorModalLoader);
             }
-        } catch (error) {
-            console.error('AI Refine Error:', error);
-            refineMessage.textContent = 'Помилка генерації: ' + error.message;
-        } finally {
-            setTimeout(() => refineMessage.textContent = '', 5000);
-            button.disabled = false;
-            refinePromptInput.value = '';
-            hideModalLoader(editorModalLoader);
         }
-    });
 
-        publishBtn.addEventListener('click', async () => {
+        async function publishPage() {
             const htmlContent = editor.value;
             if (!htmlContent.trim()) {
                 showAlert('Неможливо опублікувати порожню сторінку.', 'warning');
                 return;
             }
-
-            let payload = {
-                source: currentEditorState.source,
-                sourceTemplateId: currentEditorState.sourceTemplateId,
-                htmlContent: null
-            };
-
+            let payload = { source: currentEditorState.source, sourceTemplateId: currentEditorState.sourceTemplateId, htmlContent: null };
             if (currentEditorState.source !== 'template') {
                 payload.htmlContent = htmlContent;
             } else {
@@ -3341,20 +3681,15 @@
             }
             showModalLoader(editorModalLoader, 'Публікація сторінки...');
             try {
-                // Публікація відбувається на старому бекенді (Netlify)
                 const updatedPage = await apiCall('publishPage', payload);
                 if (updatedPage) {
                     userData.publishedPage = updatedPage;
                     closeModal(editorModal);
                     renderContent();
                 }
-            } catch(e) {
-                // apiCall handles alerts
-            } finally {
-                hideModalLoader(editorModalLoader);
-            }
-        });
-
+            } catch(e) { /* apiCall handles alerts */ }
+            finally { hideModalLoader(editorModalLoader); }
+        }
         function deletePage() {
             showConfirmModal(
                 'Ви впевнені, що хочете видалити свою сторінку? Ця дія незворотня.',
@@ -3774,6 +4109,47 @@ async function confirmPushNews(pushId, keyword = null) {
         hideLoader();
     }
 }
+
+		 function updateLineNumbers() {
+            const lineNumbersEl = document.getElementById('line-numbers');
+            const editorEl = document.getElementById('editor');
+            if (!lineNumbersEl || !editorEl) return;
+
+            const lineCount = editorEl.value.split('\n').length;
+            
+            // FIX: Use spans for each line number to work with CSS styling
+            let numbersHtml = '';
+            for (let i = 1; i <= (lineCount || 1); i++) {
+                numbersHtml += `<span>${i}</span>`;
+            }
+            lineNumbersEl.innerHTML = numbersHtml;
+
+            // Scroll synchronization is now handled by a single event listener in DOMContentLoaded
+        }
+
+		 function updateAiReviewLineNumbers() {
+            const lineNumbersEl = document.getElementById('ai-review-line-numbers');
+            const codeEl = document.getElementById('ai-review-code');
+            if (!lineNumbersEl || !codeEl) return;
+
+            // NEW, SIMPLER LOGIC: Count the direct children of the code element.
+            const lineCount = codeEl.children.length || codeEl.textContent.split('\n').length;
+            
+            let numbersHtml = '';
+            for (let i = 1; i <= Math.max(1, lineCount); i++) {
+                numbersHtml += `<span>${i}</span>`;
+            }
+            lineNumbersEl.innerHTML = numbersHtml;
+
+            // Ensure scroll is synced
+            const syncScroll = () => { lineNumbersEl.scrollTop = codeEl.scrollTop; };
+            codeEl.removeEventListener('scroll', syncScroll); // prevent multiple listeners
+            codeEl.addEventListener('scroll', syncScroll);
+        }
+		
+        // Event listeners for line numbers
+        editor.addEventListener('input', updateLineNumbers);
+        editor.addEventListener('scroll', updateLineNumbers);
     </script>
 </body>
 </html>

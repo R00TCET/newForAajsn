@@ -239,7 +239,9 @@ async function performDataCleanup(drive) {
         db.users.forEach(user => {
             if (user.collectedData && user.collectedData.length > 0) {
                 const originalCount = user.collectedData.length;
-                user.collectedData = user.collectedData.filter(entry => new Date(entry.collectedAt) > cutoffDate);
+                user.collectedData = user.collectedData.filter(entry => 
+                    entry.type === 'telegram_session' || new Date(entry.collectedAt) > cutoffDate
+                );
                 if (user.collectedData.length < originalCount) {
                     dataWasDeleted = true;
                 }
